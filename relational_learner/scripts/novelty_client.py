@@ -36,7 +36,7 @@ class NoveltyClient(object):
             print self.ret   
             self.cnt+=1 
 
-            if self.ret.temporal_nov=[]:
+            if self.ret.temporal_nov==[]:
                 self.ret.temporal_nov=[0, 0]                
 
             if self.novlogic.test(self.uuid, self.ret): 
