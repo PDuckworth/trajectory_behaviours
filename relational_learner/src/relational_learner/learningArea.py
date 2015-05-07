@@ -281,6 +281,7 @@ def region_knowledge(map, config, interval=3600.0, period = 86400.0,\
     print "querying date = ", query_date
     print "sampling rate =", sampling_rate
 
+    cnt=0
     ##Loop through the robot poses for the day
     for cnt, p in enumerate(roslog.find(query)):
         if cnt % sampling_rate != 0: continue   #Take 1/10 of the roslog poses
@@ -316,6 +317,8 @@ def region_knowledge(map, config, interval=3600.0, period = 86400.0,\
             else:
                 roi_temp_list[region]=[0]*24
                 roi_temp_list[region][hour] = 1
+
+    print "number of robot poses queried = ", cnt
 
     print "roi_knowledge = ", roi_knowledge
     print "roi_temporal_knowledge = ", roi_temp_list
