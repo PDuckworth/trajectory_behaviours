@@ -36,6 +36,9 @@ class NoveltyClient(object):
             print self.ret   
             self.cnt+=1 
 
+            if len(self.ret.temporal_nov)==0:
+                self.ret.temporal_nov=[0, 0]                
+
             if self.novlogic.test(self.uuid, self.ret): 
                 self.pub.publish(self.uuid)
                 print self.novlogic.msg
@@ -53,8 +56,12 @@ class NoveltyScoreLogic(object):
         threshold = 0.05 #probability of sample belonging to temporal model
 
         spatial_novelty = ret.spatial_dist
-        temp1 = ret.temporal_nov[0]
-        temp2 = ret.temporal_nov[1]
+        if ret.temporal_nov != []:
+            temp1 = ret.temporal_nov[0]
+            temp2 = ret.temporal_nov[1]
+        else:
+            temp1 = 0
+            temp2 = 0
 
         self.msg=""
         if spatial_novelty > 0: self.msg = ">>> spatial novelty %s" % spatial_novelty
