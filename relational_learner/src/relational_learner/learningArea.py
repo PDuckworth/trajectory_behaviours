@@ -271,7 +271,14 @@ def region_knowledge(map, config, interval=3600.0, period = 86400.0,\
     ms = GeoSpatialStoreProxy('message_store','soma_roi')
     roslog = GeoSpatialStoreProxy('roslog','robot_pose')
 
-    query = {"_id": {"$exists": "true"}}
+    ###Only query previous 24 hours worth of robot_poses
+    now = datetime.datetime.today()
+    delta = datetime.timedelta(hours=24)
+    query_date = now-delta
+    query = {"_id": {"$exists": "true"}, "_meta.inserted_at": {"$gte":query_date}}
+
+    print "date = ", now
+    print "querying date = ", query_date
     print "sampling rate =", sampling_rate
 
     ##Loop through the robot poses for the day
