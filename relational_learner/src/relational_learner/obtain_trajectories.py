@@ -98,6 +98,8 @@ def trajectory_object_dist(objects, trajectory_poses):
         #print (uuid, obj)
 
         traj_init_pose = trajectory_poses[uuid][0][:2]  #Select the first trajectory pose for now
+
+        if objects[obj] == None: continue               #If object is in Soma but not Geo/Soma it will not have coords
         object_pose = objects[obj][0:2]                 #Objects only have one pose
         dist = spatial.distance.pdist([traj_init_pose, object_pose], 'euclidean')
 
