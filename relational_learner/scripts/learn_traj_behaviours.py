@@ -63,10 +63,13 @@ def run_all(turn_on_plotting=False):
     #                  Regions of Interest Knowledge                    #
     #*******************************************************************#
     rospy.loginfo('Getting Region Knowledge from roslog...') 
-    roi_knowledge, roi_temp_list = region_knowledge(soma_map, soma_config, \
-                                                 sampling_rate=10, plot=turn_on_plotting)
+    #roi_knowledge, roi_temp_list = region_knowledge(soma_map, soma_config, \
+    #                                             sampling_rate=10, plot=turn_on_plotting)
    
-  
+    #Filter trajectories which were deemed noise by using people_trajectory store
+    list_of_filtered_uuids_res = ot.complete_trajectory_uuids(vis=True)
+
+    sys.exit(1)
     #*******************************************************************#
     #                  Obtain Episodes in ROI                           #
     #*******************************************************************#
@@ -83,6 +86,7 @@ def run_all(turn_on_plotting=False):
         all_episodes = {}
         trajectory_times = []
         for trajectory in res:
+            
             all_episodes[trajectory["uuid"]] = Mongodb_to_list(trajectory["episodes"])   
             trajectory_times.append(trajectory["start_time"])
         print "Number of Trajectories in mongodb = %s. \n" % len(all_episodes)
