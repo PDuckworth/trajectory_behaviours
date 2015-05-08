@@ -63,17 +63,20 @@ def run_all(turn_on_plotting=False):
     #                  Regions of Interest Knowledge                    #
     #*******************************************************************#
     rospy.loginfo('Getting Region Knowledge from roslog...') 
-    #roi_knowledge, roi_temp_list = region_knowledge(soma_map, soma_config, \
-    #                                             sampling_rate=10, plot=turn_on_plotting)
+    roi_knowledge, roi_temp_list = region_knowledge(soma_map, soma_config, \
+                                                 sampling_rate=10, plot=turn_on_plotting)
    
     #Filter trajectories which were deemed noise by using people_trajectory store
-    list_of_filtered_uuids_res = ot.complete_trajectory_uuids(vis=True)
+    list_of_filtered_uuids = ot.filtered_trajectory_uuids(vis=True)
+    
+    set_of_uuids = set(list_of_filtered_uuids)
+    if len(list_of_filtered_uuids) != len(set_of_uuids):
+        print "Some non-unique UUIDs in people_trajectory"
 
-    sys.exit(1)
     #*******************************************************************#
     #                  Obtain Episodes in ROI                           #
     #*******************************************************************#
-    rospy.loginfo("0. Running ROI query from message_store")   
+    rospy.loginfo("0. Running ROI query from message_store")
     for roi in gs.roi_ids(soma_map, soma_config):
         str_roi = "roi_%s" % roi
         #if roi != '12': continue
@@ -82,15 +85,19 @@ def run_all(turn_on_plotting=False):
         query = {"soma_roi_id" : str(roi)} 
 
         res = msg_store.find(query)
-
         all_episodes = {}
         trajectory_times = []
-        for trajectory in res:
-            
+        for cnt, trajectory in enumerate(res):
+            #print cnt
+            if trajectory["uuid"] not in set_of_uuids:
+                #print "UUID: %s filtered out" % str(trajectory["uuid"])
+                continue
             all_episodes[trajectory["uuid"]] = Mongodb_to_list(trajectory["episodes"])   
             trajectory_times.append(trajectory["start_time"])
-        print "Number of Trajectories in mongodb = %s. \n" % len(all_episodes)
-       
+    
+        print "Total Number of Trajectories = %s. \n" % cnt
+        print "Number of Trajectories after filtering = %s. \n" % len(all_episodes)
+
         if len(all_episodes) < 12:
             print "Not enough episodes in region %s to learn model. \n" % roi
             continue

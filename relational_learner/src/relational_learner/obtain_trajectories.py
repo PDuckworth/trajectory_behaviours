@@ -82,20 +82,18 @@ class QueryClient():
             rospy.logerr("Service call failed: %s"%e)
 
 
-def complete_trajectory_uuids(vis=False):
+def filtered_trajectory_uuids(vis=False):
     """Find the completed (and filtered) trajectories from people_trajectory store"""
-    client = QueryClient()
-    query = '{"uuid": {"$exists": "True"}}'
-    #query = '{"complete": true}'
+    msg_store = GeoSpatialStoreProxy('message_store', 'people_trajectory')
+    query = {"uuid": {"$exists": "True"}}
     rospy.loginfo("Query: %s" % query )
-    res = client.query(query, vis)
-    rospy.loginfo("Result: %s filtered trajectories" % len(res.trajectories.trajectories))
 
-    print type(res)
-    print len(res)
-
-    return res
-
+    res = msg_store.find_projection(query, {"uuid":1})
+    rospy.loginfo("Result: %s filtered trajectories" % res.count() ) 
+    list_of_uuids = []
+    for i in res:
+        list_of_uuids.append(i["uuid"])
+    return list_of_uuids
 
 
 def trajectory_object_dist(objects, trajectory_poses):
