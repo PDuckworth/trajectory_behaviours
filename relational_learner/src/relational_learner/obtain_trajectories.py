@@ -82,6 +82,19 @@ class QueryClient():
             rospy.logerr("Service call failed: %s"%e)
 
 
+def complete_trajectory_uuids(vis=False):
+    """Find the completed (and filtered) trajectories from people_trajectory store"""
+    client = QueryClient()
+    query = '{"uuid": {"$exists": "True"}}'
+    #query = '{"complete": true}'
+    rospy.loginfo("Query: %s" % query )
+    res = client.query(query, vis)
+    rospy.loginfo("Result: %s filtered trajectories" % len(res.trajectories.trajectories))
+
+    print type(res)
+    print len(res)
+
+    return res
 
 
 
@@ -129,10 +142,7 @@ def trajectory_object_dist(objects, trajectory_poses):
     return closest_objects
 
 
-
-
 class query_trajectories():
-
     def __init__(self, query):
         client = QueryClient()
         self.res = client.query(query, True)
