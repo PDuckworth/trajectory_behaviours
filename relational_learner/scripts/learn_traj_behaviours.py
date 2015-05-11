@@ -64,7 +64,7 @@ def run_all(turn_on_plotting=False):
     #*******************************************************************#
     rospy.loginfo('Getting Region Knowledge from roslog...') 
     roi_knowledge, roi_temp_list = region_knowledge(soma_map, soma_config, \
-                                                 sampling_rate=10, plot=turn_on_plotting)
+                                       sampling_rate=10, plot=turn_on_plotting)
    
     #Filter trajectories which were deemed noise by using people_trajectory store
     list_of_filtered_uuids = ot.filtered_trajectory_uuids(vis=True)
@@ -121,12 +121,23 @@ def run_all(turn_on_plotting=False):
         (code_book, graphlet_book, X_source_U) = feature_space
         print "code_book length = ", len(code_book)
 
-        #print ">>>>>CODEBOOK 1:"
-        #print code_book[1]
-        #print graphlet_book[1].graph
-        
-        #for cnt, i in enumerate(graphlet_book):
-        #    print cnt,  i.graph, "\n"
+        #**************************************************************#
+        #                    Create a similarty space                  #
+        #**************************************************************#
+        rospy.loginfo('Create Similarity Space')
+        similarity_space = get_similarity_space(feature_space)
+        dictionary_of_similarity = {}
+
+        for i in similarity_space:
+            key = np.sum(i)
+            if key in dictionary_of_similarity:
+                dictionary_of_similarity[key]+=1
+            else:
+                dictionary_of_similarity[key]=1
+
+        #print "similarty space matches =" #Note: Reducing +ve histogram counts to 1
+        #for key, cnt in dictionary_of_similarity.items():
+           #print key, cnt
 
         #**************************************************************#
         #                    Learn a Clustering model                  #
