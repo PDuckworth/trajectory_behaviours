@@ -1,7 +1,11 @@
 #!/usr/bin/env python
 
-#__author__      = "Paul Duckworth"
-#__copyright__   = "Copyright 2015, University of Leeds"
+"""Creates Episodes for Trajectory data which match the query
+   trajectory_query_service needs to be running for Obtain_trajectory to run"""
+
+__author__      = "Paul Duckworth"
+__copyright__   = "Copyright 2015, University of Leeds"
+
 
 import sys
 import rospy
@@ -39,43 +43,24 @@ if __name__ == "__main__":
     rospy.init_node('episodes_client')
 
     ec = EpisodeClient()
+    #query ='''{"uuid": {"$exists" : "True"}}'''
 
-    ### Query all ROI 12 to test (or just one dude) ###
-    #query = '''{"uuid": "7d638405-b2f8-55ce-b593-efa8e3f2ff2e"}''' 
-    ###geoIntersects? - Fix
-
-    
-    query ='''{"loc": { "$geoWithin": { "$geometry":
-        { "type" : "Polygon", "coordinates" : [ [ 
-                    [ -0.0002246355582968818, 
-                      -2.519034444503632e-05],
-                    [ -0.0002241486476179944, 
-                     -7.42736662147081e-05], 
-                    [ -0.000258645873657315, 
-                      -7.284014769481928e-05],
-                    [ -0.0002555339747090102, 
-                      -2.521782172948406e-05],
-                    [ -0.0002246355582968818, 
-                      -2.519034444503632e-05]
-                    ] ] }}}}'''
-    
+    query ='''{"uuid": "b74c11b7-e196-5e93-a1c0-a9fb6b93866f"}''' # 17000 poses
+    #query ='''{"uuid": "3d99e112-2c92-52e7-81bf-61c3064cbb0d"}''' # 4700 poses
     q = ot.query_trajectories(query)
 
-    test_list= [q.res.trajectories.trajectories[0],q.res.trajectories.trajectories[1],\
-       q.res.trajectories.trajectories[1], q.res.trajectories.trajectories[2], \
-       q.res.trajectories.trajectories[2], q.res.trajectories.trajectories[2],\
-       q.res.trajectories.trajectories[0], q.res.trajectories.trajectories[0]]
-
+    #raw_input("finished query. Enter to continue.")
     for cnt, i in enumerate(q.res.trajectories.trajectories):
-    #for cnt, i in enumerate(test_list):
-        print "\n",cnt, i.uuid
+
+        print "\n", cnt, i.uuid
 
         ret = ec.episode_client(i)
         #print ret.header
         print ret.uuid, ret.soma_roi_id
         print "len = ", len(ret.episodes)
-        ec.pub.publish(ret)
-        rospy.sleep(1) 
+        print ret.episodes
+        #ec.pub.publish(ret)
+        #rospy.sleep(1) 
 
     #rospy.spin()
 

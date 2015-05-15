@@ -58,7 +58,8 @@ class Importer(object):
         rospy.loginfo("Connecting to mongodb...")
         self._client = pymongo.MongoClient(rospy.get_param("mongodb_host"),
                                            rospy.get_param("mongodb_port"))
-        self._store_client = MessageStoreProxy(collection="relational_episodes")
+
+        self._store_client = MessageStoreProxy(collection="relational_episodes_test")
 
 
 def get_episode_msg(all_episodes):

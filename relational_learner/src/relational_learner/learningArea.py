@@ -377,6 +377,31 @@ def robot_view_cone( Px, Py, yaw):
     return [ [Lx, Ly], [Rx, Ry], [Px, Py] ]
 
 
+def get_similarity_space(feature_space):
+    "Encode a similarity space from the histogram of graphlets"
+    (code_book, graphlet_book, X_source_U) = feature_space
+
+    print "Feature space length = %s. Width = %s" %(len(X_source_U), len(X_source_U[0]))
+
+    A = np.matrix(X_source_U)
+    #Test: Set all positive counts to 1.
+    A[A>1] = 1
+
+    size = np.shape(A)[0]
+    sim = np.zeros((size, size))
+
+    for row in xrange((np.shape(A)[0]/2)+1):
+        B = np.roll(A, -row, axis=0)
+
+        for comparison_row, comparison_col in enumerate(A==B):
+            if comparison_col.all() == True:
+            #if np.sum(comparison_col) >= np.shape(A)[1]:
+                col =(comparison_row + row) % size
+                sim[col][comparison_row] = 1
+                sim[comparison_row][col] = 1               
+
+    return sim
+        
 
 def plot_pca(data, k):
     ###############################################################################
