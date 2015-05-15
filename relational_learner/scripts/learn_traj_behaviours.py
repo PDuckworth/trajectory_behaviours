@@ -50,13 +50,14 @@ def Mongodb_to_list(res):
     return ep_list
 
 
-def run_all(turn_on_plotting=False):
+def run_all(turn_on_plotting=False, episode_store='relational_episodes'):
 
     (directories, config_path, input_data, date) = util.get_learning_config()
     (data_dir, qsr, eps, activity_graph_dir, learning_area) = directories
     (soma_map, soma_config) = util.get_map_config(config_path)
     gs = GeoSpatialStoreProxy('geospatial_store','soma')
-    msg_store = GeoSpatialStoreProxy('message_store', 'relational_episodes')
+
+    msg_store = GeoSpatialStoreProxy('message_store', episode_store)
 
 
     #*******************************************************************#
@@ -95,6 +96,7 @@ def run_all(turn_on_plotting=False):
             all_episodes[trajectory["uuid"]] = Mongodb_to_list(trajectory["episodes"])   
             trajectory_times.append(trajectory["start_time"])
     
+        cnt+=1 #enumerate starts cnt from 0
         print "Total Number of Trajectories = %s. \n" % cnt
         print "Number of Trajectories after filtering = %s. \n" % len(all_episodes)
 
@@ -146,7 +148,7 @@ def run_all(turn_on_plotting=False):
         params, tag = AG_setup(input_data, date, str_roi)
 
         smartThing=Learning(f_space=feature_space, roi=str_roi, vis=False)
-        smartThing.kmeans(k=None) #Can pass k, or auto selects min(penalty)
+        smartThing.kmeans(k=2) #Can pass k, or auto selects min(penalty)
 
 
         #*******************************************************************#
@@ -178,17 +180,31 @@ def run_all(turn_on_plotting=False):
 
 class Offline_Learning(object):
 
-    def learn(self, turn_on_plotting=True):
-    	r = run_all(turn_on_plotting)
+    def learn(self, turn_on_plotting=True, episode_store='relational_episodes'):
+        print "GOT HERE"
+    	r = run_all(turn_on_plotting, episode_store)
 	
 
 
 if __name__ == "__main__":
     rospy.init_node("trajectory_learner")
+
+    turn_plotting = True
+    if len(sys.argv) < 2:
+        rospy.logerr("usage: offlinelearning turn_on_plotting[0/1]")
+        sys.exit(1)
+
+    episode_store='relational_episodes'
+    if len(sys.argv) < 3:
+        rospy.logerr("usage: give an episode message store. `relational_episodes` by default.")
+
+    print int(sys.argv[1])
+    print sys.argv[2]
+
     o = Offline_Learning()
-    o.learn()
+    o.learn(turn_on_plotting=int(sys.argv[1]), episode_store=sys.argv[2])
 
-
+    
     #Test:
     data_dir = '/home/strands/STRANDS/'
     file_ = os.path.join(data_dir + 'learning/roi_12_smartThing.p')
