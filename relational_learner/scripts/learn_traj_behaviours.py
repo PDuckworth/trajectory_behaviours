@@ -82,7 +82,7 @@ def run_all(turn_on_plotting=False, episode_store='relational_episodes'):
         str_roi = "roi_%s" % roi
         #if roi != '12': continue
 
-        print 'ROI: ', gs.type_of_roi(roi, soma_map, soma_config), roi
+        print '\nROI: ', gs.type_of_roi(roi, soma_map, soma_config), roi
         query = {"soma_roi_id" : str(roi)} 
 
         res = msg_store.find(query)
@@ -97,11 +97,11 @@ def run_all(turn_on_plotting=False, episode_store='relational_episodes'):
             trajectory_times.append(trajectory["start_time"])
     
         cnt+=1 #enumerate starts cnt from 0
-        print "Total Number of Trajectories = %s. \n" % cnt
-        print "Number of Trajectories after filtering = %s. \n" % len(all_episodes)
+        print "Total Number of Trajectories = %s." % cnt
+        print "Number of Trajectories after filtering = %s." % len(all_episodes)
 
         if len(all_episodes) < 12:
-            print "Not enough episodes in region %s to learn model. \n" % roi
+            print "Not enough episodes in region %s to learn model." % roi
             continue
 
         #**************************************************************#
@@ -141,6 +141,7 @@ def run_all(turn_on_plotting=False, episode_store='relational_episodes'):
         #for key, cnt in dictionary_of_similarity.items():
            #print key, cnt
 
+
         #**************************************************************#
         #                    Learn a Clustering model                  #
         #**************************************************************#
@@ -148,6 +149,12 @@ def run_all(turn_on_plotting=False, episode_store='relational_episodes'):
         params, tag = AG_setup(input_data, date, str_roi)
 
         smartThing=Learning(f_space=feature_space, roi=str_roi, vis=False)
+
+        pca, variable_scores = smartThing.pca_investigate_variables()
+
+        top = 0.1 #Percentage of graphlets to analyse (make this automatic?)
+        smartThing.pca_graphlets(pca, variable_scores, top)
+
         smartThing.kmeans(k=2) #Can pass k, or auto selects min(penalty)
 
 
@@ -181,7 +188,6 @@ def run_all(turn_on_plotting=False, episode_store='relational_episodes'):
 class Offline_Learning(object):
 
     def learn(self, turn_on_plotting=True, episode_store='relational_episodes'):
-        print "GOT HERE"
     	r = run_all(turn_on_plotting, episode_store)
 	
 

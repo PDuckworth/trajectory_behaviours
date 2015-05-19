@@ -29,7 +29,7 @@ class OfflineLearning_server(object):
 
     def execute(self, goal):
         ol = Offline_Learning()
-        if not self.cond(): ol.learn()#ol.learn(self.turn_on_plotting, self.episode_store)
+        if not self.cond(): ol.learn(self.turn_on_plotting, self.episode_store)
 	    #Split on multiple methods to allow system to stop the action server
         self._as.set_succeeded(OfflineLearningResult())
 

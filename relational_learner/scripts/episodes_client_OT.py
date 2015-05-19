@@ -43,13 +43,13 @@ if __name__ == "__main__":
     rospy.init_node('episodes_client')
 
     ec = EpisodeClient()
-    #query ='''{"uuid": {"$exists" : "True"}}'''
+    query ='''{"uuid": {"$exists" : "True"}}'''
 
-    query ='''{"uuid": "b74c11b7-e196-5e93-a1c0-a9fb6b93866f"}''' # 17000 poses
+    #query ='''{"uuid": "b74c11b7-e196-5e93-a1c0-a9fb6b93866f"}''' # 17000 poses
     #query ='''{"uuid": "3d99e112-2c92-52e7-81bf-61c3064cbb0d"}''' # 4700 poses
     q = ot.query_trajectories(query)
 
-    #raw_input("finished query. Enter to continue.")
+    raw_input("finished query. Enter to continue.")
     for cnt, i in enumerate(q.res.trajectories.trajectories):
 
         print "\n", cnt, i.uuid

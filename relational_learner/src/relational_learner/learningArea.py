@@ -97,6 +97,67 @@ class Learning():
             print "Loading of learnt model failed. Cannot test novelty)."
             self.flag = False
 
+    def pca_investigate_variables(self):
+        """
+        1. Sort the eigenvalues, and select the eigenvalues with the highest.
+        2. Combine the eigenvectors to form the new subspace. Matrix W.
+        3. transform our samples  y= W^T * x
+        4. assert transformed.shape == (k,40). where k is the reduced subspace dimension.
+        """
+        X = np.array(self.feature_space) 
+        print "Sample space shape >>", X.shape
+
+        pca = PCA(n_components=0.99)
+        #pca = PCA(n_components=3)
+        transf = pca.fit_transform(X)
+        print ">>>pca ", pca
+        print "Transform the samples onto the new subspace: ", transf.shape
+        #print "> comps = ", pca.components_
+        print "> var explained by each comp:", pca.explained_variance_ratio_
+
+        #get_relevant_variable()
+        num_features = len(pca.components_[0])
+        variable_scores = [0]*num_features
+
+        for cnt, component in enumerate(pca.components_):
+            """
+            For each principle component, multiply each variable by the variance the component
+            explains, to obtain a score for each variable in the component.
+            """
+            for i, var in enumerate(component):
+                variable_scores[i] += abs(var*pca.explained_variance_ratio_[cnt])
+
+        print ">> Weighting of each variable: \n", variable_scores, "\n"
+
+        self.vis=False
+        if self.vis:
+            plt.plot(transf, 'o', markersize=5, color='blue', alpha=0.5, label='all data')
+
+            #plt.plot(sklearn_transf[20:40,0], sklearn_transf[20:40,1],\
+            #   '^', markersize=7, color='red', alpha=0.5, label='class2')
+
+            plt.xlabel('x_values')
+            plt.ylabel('y_values')
+            plt.xlim([-4,100])
+            plt.ylim([-4,4])
+            plt.legend()
+            plt.title('Transformed samples with class labels from sklearn.PCA()')
+
+            plt.show()
+    
+        return pca, variable_scores 
+
+    
+    def pca_graphlets(self, pca, variable_scores, top=0.1):
+        """
+        visually inspect the most/least disctiminating graphlet features
+        """
+        max_score = max(variable_scores)
+        feature1 = variable_scores.index(max_score)
+        print "max score = %s" % max_score
+        print ">> best feature: ", self.code_book[feature1], "\n", self.graphlet_book[feature1].graph
+
+        return
 
     def kmeans(self, k=None):
         np.random.seed(42)
@@ -340,6 +401,14 @@ def region_knowledge(map, config, interval=3600.0, period = 86400.0,\
 
     rospy.loginfo('Done')
     return roi_knowledge, roi_temp_list
+
+
+
+
+
+
+
+
 
 
 def knowledge_plot(roi_temp_list, n_bins):
