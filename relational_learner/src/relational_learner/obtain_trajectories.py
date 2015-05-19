@@ -13,9 +13,10 @@ import logging
 import itertools
 import numpy as np
 import cPickle as pickle
-import random
+import random, math
 import landmark_utils  as lu
 from scipy import spatial
+import matplotlib.pyplot as plt
 
 from interactive_markers.interactive_marker_server import *
 from visualization_msgs.msg import *
@@ -82,18 +83,29 @@ class QueryClient():
             rospy.logerr("Service call failed: %s"%e)
 
 
-def filtered_trajectory_uuids(vis=False):
+def filtered_trajectorys():
     """Find the completed (and filtered) trajectories from people_trajectory store"""
     msg_store = GeoSpatialStoreProxy('message_store', 'people_trajectory')
     query = {"uuid": {"$exists": "True"}}
     rospy.loginfo("Query: %s" % query )
 
-    res = msg_store.find_projection(query, {"uuid":1})
+    res = msg_store.find(query)
     rospy.loginfo("Result: %s filtered trajectories" % res.count() ) 
-    list_of_uuids = []
-    for i in res:
-        list_of_uuids.append(i["uuid"])
-    return list_of_uuids
+
+    spatial_downsampling_x, spatial_downsampling_y = {}, {}
+
+    list_of_uuids, x, y = [], [], []
+    for full_trajectory in res:
+        list_of_uuids.append(full_trajectory["uuid"])
+       
+        for entry in full_trajectory["trajectory"]:
+            x.append(entry["pose"]["position"]["x"])
+            y.append(entry["pose"]["position"]["y"])
+
+    if len(x) != len(y): print "X and Y dimensions are different!"
+    
+    return list_of_uuids, {"x":x, "y":y}
+
 
 
 def trajectory_object_dist(objects, trajectory_poses):

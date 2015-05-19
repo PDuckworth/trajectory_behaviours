@@ -47,6 +47,7 @@ if __name__ == "__main__":
 
     #query ='''{"uuid": "b74c11b7-e196-5e93-a1c0-a9fb6b93866f"}''' # 17000 poses
     #query ='''{"uuid": "3d99e112-2c92-52e7-81bf-61c3064cbb0d"}''' # 4700 poses
+    #query ='''{"uuid": "a8d94e85-7976-54ed-8413-c7d9240d26aa"}'''
     q = ot.query_trajectories(query)
 
     raw_input("finished query. Enter to continue.")

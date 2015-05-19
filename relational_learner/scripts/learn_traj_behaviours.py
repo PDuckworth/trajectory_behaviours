@@ -24,6 +24,8 @@ from soma_geospatial_store.geospatial_store import *
 
 import novelTrajectories.config_utils as util
 import relational_learner.obtain_trajectories as ot
+import relational_learner.trajectory_heatmap as th
+
 from relational_learner.graphs_handler import *
 from novelTrajectories.traj_data_reader import *
 from relational_learner.learningArea import *
@@ -68,11 +70,21 @@ def run_all(turn_on_plotting=False, episode_store='relational_episodes'):
                                        sampling_rate=10, plot=turn_on_plotting)
    
     #Filter trajectories which were deemed noise by using people_trajectory store
-    list_of_filtered_uuids = ot.filtered_trajectory_uuids(vis=True)
-    
-    set_of_uuids = set(list_of_filtered_uuids)
-    if len(list_of_filtered_uuids) != len(set_of_uuids):
+    list_of_poses, pose_data_dic = ot.filtered_trajectorys()
+    set_of_uuids = set(list_of_poses)
+    if len(list_of_poses) != len(set_of_uuids):
         print "Some non-unique UUIDs in people_trajectory"
+
+
+    #*******************************************************************#
+    #              Analyse the shape of the Trajectories                #
+    #*******************************************************************# 
+    pickle.dump(pose_data_dic, open(data_dir+"trajectory_dump/t_dict_text.p",'wt'))
+    pickle.dump(pose_data_dic, open(data_dir+"trajectory_dump/t_dict_binary.p",'wb'))
+
+    heatmap = th.Trajectories_Heatmap(data=pose_data_dic, vis=True)
+    heatmap.get_binned_data()
+    heatmap.run()
 
     #*******************************************************************#
     #                  Obtain Episodes in ROI                           #
@@ -198,7 +210,6 @@ if __name__ == "__main__":
     turn_plotting = True
     if len(sys.argv) < 2:
         rospy.logerr("usage: offlinelearning turn_on_plotting[0/1]")
-        sys.exit(1)
 
     episode_store='relational_episodes'
     if len(sys.argv) < 3:
