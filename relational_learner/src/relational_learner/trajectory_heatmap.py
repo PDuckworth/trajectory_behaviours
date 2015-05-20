@@ -71,14 +71,14 @@ class Trajectories_Heatmap(object):
         return data_ret
 
 
-    def run(self, vis=False):
+    def run(self, vis=False, with_analysis=False):
         self.compute_heatmap()
-        self.filter_outliers()
+        self.filter_outliers(with_analysis=with_analysis)
         if vis:
             self.plot_heatmap()
 
 
-    def filter_outliers(self, mean_or_median="mean", std_factor=2, set_value=0.0, analyze=False):
+    def filter_outliers(self, mean_or_median="mean", std_factor=2, set_value=0.0, with_analysis=False):
         # heatmap, xedges, yedges = self.compute_heatmap(xs=self.data["x"], ys=self.data["y"])
 
         hflat = self.heatmap.flatten()
@@ -93,22 +93,22 @@ class Trajectories_Heatmap(object):
         thres = hfc + std_factor * hfstd
         if set_value < 0:
             set_value = thres
-        self.heatmap[self.heatmap > thres] = set_value
 
-        if analyze:
+        if with_analysis:
             ahmean = np.mean(self.heatmap)
             ahmedian = np.median(self.heatmap)
             ahstd = np.std(self.heatmap)
             ahfmean = np.mean(hflat)
             ahfmedian = np.median(hflat)
             ahfstd = np.std(hflat)
-            if self.verbose:
-                print "# heatmap bins:", self.heatmap.shape, self.heatmap.shape[0]*self.heatmap.shape[1]
-                print "# votes in heatmap:", self.heatmap.sum()
-                print "-heatmap\nmean:", ahmean, "median:", ahmedian, "std:", ahstd
-                print "-heatmap flat and without zeros\nmean:", ahfmean, "median:", ahfmedian, "std:", ahfstd
-                print "thres(%d*std): %f" %(std_factor, thres)
-                print self.heatmap[self.heatmap > thres]
+            print "# heatmap bins:", self.heatmap.shape, self.heatmap.shape[0]*self.heatmap.shape[1]
+            print "# votes in heatmap:", self.heatmap.sum()
+            print "-heatmap\nmean:", ahmean, "median:", ahmedian, "std:", ahstd
+            print "-heatmap flat and without zeros\nmean:", ahfmean, "median:", ahfmedian, "std:", ahfstd
+            print "thres(%d*std): %f" %(std_factor, thres)
+            print "following will be filtered out\n", self.heatmap[self.heatmap > thres]
+
+        self.heatmap[self.heatmap > thres] = set_value
 
 
     def compute_heatmap(self):
@@ -147,4 +147,4 @@ if __name__ == '__main__':
     args = argp.parse_args()
 
     th = Trajectories_Heatmap(bin_size=0.05, pickle_file=args.load)
-    th.run(vis=args.view)
+    th.run(vis=args.view, with_analysis=True)
