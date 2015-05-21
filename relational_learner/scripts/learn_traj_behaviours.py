@@ -83,7 +83,7 @@ def run_all(turn_on_plotting=False, episode_store='relational_episodes'):
     pickle.dump(pose_data_dic, open(data_dir+"trajectory_dump/t_dict_binary.p",'wb'))
 
     heatmap = th.Trajectories_Heatmap(bin_size=0.05, data=pose_data_dic)
-    heatmap.run(vis=True)
+    heatmap.run(vis=True, with_analysis=True)
 
     #*******************************************************************#
     #                  Obtain Episodes in ROI                           #

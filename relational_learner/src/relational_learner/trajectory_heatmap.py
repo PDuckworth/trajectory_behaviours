@@ -6,6 +6,7 @@ import numpy as np
 import cPickle as pickle
 import matplotlib.pyplot as plt
 import argparse
+import convex_hull as ch
 
 class Trajectories_Heatmap(object):
     def __init__(self, bin_size, pickle_file=None, data=None, verbose=False):
@@ -39,11 +40,12 @@ class Trajectories_Heatmap(object):
 
         for cnt, (x_, y_) in enumerate(zip(data["x"], data["y"])):
             if cnt == 0:
-                x = int(x_ / bin_size)
-                y = int(y_ / bin_size)
+                x = int(x_ / float(bin_size))
+                y = int(y_ / float(bin_size))
             else:
-                new_x = int(x_ / bin_size)
-                new_y = int(y_ / bin_size)
+                new_x = int(x_ / float(bin_size))
+                new_y = int(y_ / float(bin_size))
+
                 velocity = math.sqrt((new_x-x)**2 + (new_y-y)**2 )
                 velocities.append(velocity)
                 if velocity>0: velocities_non_zero.append(velocity) 
@@ -136,7 +138,28 @@ class Trajectories_Heatmap(object):
             plt.imshow(heatmap.T, extent=extent, origin = 'lower')
         else:
             plt.imshow(heatmap.T, origin='lower')
+        #plt.show()
+
+
+    def plot_polygon(self, **kwargs):
+
+        xs = [ float(i) for i in self.data["x"]]
+        ys = [ float(i) for i in self.data["y"]]
+
+        #Keep only one point per bin
+        xy = zip(xs, ys)
+        xy = set(xy)
+        points = np.array((zip(*xy)))
+        #points = np.array((xs, ys))
+
+        print "points >", points.shape
+        hull_pts = ch.convex_hull(points, graphic=True)
+        print "hull_points size >>", hull_pts.shape
+        print hull_points
+
+        ch.draw_polygon(hull_pts, **kwargs)
         plt.show()
+
 
 
 
@@ -148,3 +171,6 @@ if __name__ == '__main__':
 
     th = Trajectories_Heatmap(bin_size=0.05, pickle_file=args.load)
     th.run(vis=args.view, with_analysis=True)
+
+    th.plot_polygon(facecolor='green', alpha = 0.4)
+    #pickle.dump(th.data, open("/home/strands/convex_points.p", "w"))
