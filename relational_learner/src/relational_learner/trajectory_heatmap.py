@@ -46,6 +46,8 @@ class Trajectories_Heatmap(object):
                 new_x = int(x_ / float(bin_size))
                 new_y = int(y_ / float(bin_size))
 
+                #if new_y > 0: continue
+
                 velocity = math.sqrt((new_x-x)**2 + (new_y-y)**2 )
                 velocities.append(velocity)
                 if velocity>0: velocities_non_zero.append(velocity) 
@@ -68,7 +70,8 @@ class Trajectories_Heatmap(object):
         if self.verbose:
             print "filtering on velocity: %s to %s " %  (len(self.original_data["x"]), len(self.data["x"]))
             print "velocities = ", np.mean(velocities), np.median(velocities), np.max(velocities), np.std(velocities)
-            print "nonzero = ", np.mean(velocities_non_zero), np.median(velocities_non_zero), np.max(velocities_non_zero), np.std(velocities_non_zero)
+            print "nonzero = ", np.mean(velocities_non_zero), np.median(velocities_non_zero), \
+                        np.max(velocities_non_zero), np.std(velocities_non_zero)
 
         return data_ret
 
@@ -92,7 +95,11 @@ class Trajectories_Heatmap(object):
         else:
             raise ValueError("incorrect value for mean_or_median parameter, must be 'mean' or 'median'")
         hfstd = np.std(hflat)
-        thres = hfc + std_factor * hfstd
+
+        thres_low = hfc - std_factor * hfstd
+        if thres_low<0: thres_low=1
+        thres_high = hfc + std_factor * hfstd
+
         if set_value < 0:
             set_value = thres
 
@@ -107,11 +114,18 @@ class Trajectories_Heatmap(object):
             print "# votes in heatmap:", self.heatmap.sum()
             print "-heatmap\nmean:", ahmean, "median:", ahmedian, "std:", ahstd
             print "-heatmap flat and without zeros\nmean:", ahfmean, "median:", ahfmedian, "std:", ahfstd
-            print "thres(%d*std): %f" %(std_factor, thres)
-            print "following will be filtered out\n", self.heatmap[self.heatmap > thres]
+            print "threshold high (%d*std): %f" %(std_factor, thres_high)
+            print "following will be filtered out\n", self.heatmap[self.heatmap > thres_high]
+            print "threshold low (%d*std): %f" %(std_factor, thres_low)
+            print "following will be filtered out\n", self.heatmap[self.heatmap < thres_low]
+        
+        (xs, ys) = np.where(self.heatmap > thres_high)
+        #print ">>>", (xs, ys)
 
-        self.heatmap[self.heatmap > thres] = set_value
-
+        #LowPass filter. More than one trajectory in each bin
+        self.heatmap[self.heatmap <= thres_low] = set_value
+        #HighPass filter. Remove bins with > then a couple of std's away from the mean
+        self.heatmap[self.heatmap > thres_high] = set_value
 
     def compute_heatmap(self):
         try:
@@ -123,9 +137,16 @@ class Trajectories_Heatmap(object):
             raise ValueError("data not set, use set_data method first")
         xbins = xmax - xmin + 1
         ybins = ymax - ymin + 1
+
         if self.verbose: print "xmin:", xmin, "xmax:", xmax, "ymin:", ymin, "ymax:", ymax, "xbins:", xbins, "ybins:", ybins
         self.heatmap, self.xedges, self.yedges = np.histogram2d(self.data["x"], self.data["y"],
                                                                 bins=[xbins, ybins], range=[[xmin, xmax],[ymin, ymax]])
+        print "shape of heatmap = ", self.heatmap.shape
+        print "heatmap = ", self.heatmap
+        #print "xedges = ", self.xedges
+        #print "yedges = ", self.yedges
+        print "bins = ", [xbins, ybins]
+        print "range = ", [[xmin, xmax],[ymin, ymax]]
 
 
     def plot_heatmap(self, heatmap=None, xedges=None, yedges=None):
@@ -138,29 +159,96 @@ class Trajectories_Heatmap(object):
             plt.imshow(heatmap.T, extent=extent, origin = 'lower')
         else:
             plt.imshow(heatmap.T, origin='lower')
-        #plt.show()
+        plt.show()
 
 
-    def plot_polygon(self, **kwargs):
+    def plot_polygon(self, vis=False, **kwargs):
+        xmin = min(self.data["x"])
+        ymin = min(self.data["y"])
 
-        xs = [ float(i) for i in self.data["x"]]
-        ys = [ float(i) for i in self.data["y"]]
+        if self.heatmap.shape[0]==0:
+            raise ValueError("Cannot fit polygon to trajectories. No heatmap points")
 
-        #Keep only one point per bin
+        #Keep only one point per bin (just to make sure)
+        (xs, ys) = np.where(self.heatmap !=0)
+
+        #This is currently an approximation, because points have been binned previously.
+        xs = [ float(i+xmin) for i in xs]
+        ys = [ float(i+ymin) for i in ys]
+
         xy = zip(xs, ys)
         xy = set(xy)
         points = np.array((zip(*xy)))
         #points = np.array((xs, ys))
 
         print "points >", points.shape
-        hull_pts = ch.convex_hull(points, graphic=True)
+        hull_pts = ch.convex_hull(points, graphic=vis)
         print "hull_points size >>", hull_pts.shape
-        print hull_points
 
         ch.draw_polygon(hull_pts, **kwargs)
-        plt.show()
+        if vis: plt.show()
+
+        return hull_pts
 
 
+    def aeroplot_test(self, interest_points):
+        xmin = min(self.data["x"])
+        xmax = max(self.data["x"])
+        ymin = min(self.data["y"])
+        ymax = max(self.data["y"])
+
+        X, Y = np.meshgrid(self.xedges, self.yedges)   # generates a mesh grid
+
+        print "here:", len(X), len(Y), len(X[0]), len(Y[0])
+        print "Plotting quiver..."
+
+        plt.xlabel('x', fontsize=16)
+        plt.ylabel('y', fontsize=16)
+        plt.xlim(xmin, xmax)
+        plt.ylim(ymin, ymax)
+        #plt.scatter(X, Y, s=1, color='#CD2305', marker='o', linewidth=0)
+
+        for source_point in interest_points:
+            print source_point
+            u_pair, v_pair = add_source_point(X, Y, source_point, 5.0)
+
+            for sink_point in interest_points:
+                if source_point[0] == sink_point[0] and source_point[1] == sink_point[1]: continue
+
+                u_sink, v_sink = add_sink_point(X, Y, sink_point, 5.0)
+                u_pair+=u_sink
+                v_pair+=v_sink
+
+            plt.streamplot(X, Y, u_pair, v_pair, density=2.0, linewidth=1, arrowsize=2, arrowstyle='->')
+            plt.show()
+
+
+
+
+def add_source_point(X, Y, interest_point, strength=5.0):
+    strength_source = strength                                    # source strength
+    x_source, y_source = interest_point[0], interest_point[1]     # location of the source
+
+    # computes the velocity field on the mesh grid
+    u_source = strength_source/(2*math.pi) * (X-x_source)/((X-x_source)**2 + (Y-y_source)**2)
+    v_source = strength_source/(2*math.pi) * (Y-y_source)/((X-x_source)**2 + (Y-y_source)**2)
+
+    #plt.streamplot(X, Y, u_source, v_source, density=1, linewidth=1, arrowsize=2, arrowstyle='->')
+    plt.scatter(x_source, y_source, color='r', s=80, marker='o', linewidth=0)
+    return u_source, v_source
+
+
+def add_sink_point(X, Y, interest_point, strength=5.0):
+    strength_sink = -5.0                                           # strength of the sink
+    x_sink, y_sink = interest_point[0], interest_point[1]            # location of the sink
+
+    # computes the velocity on the mesh grid
+    u_sink = strength_sink/(2*math.pi) * (X-x_sink)/((X-x_sink)**2 + (Y-y_sink)**2)
+    v_sink = strength_sink/(2*math.pi) * (Y-y_sink)/((X-x_sink)**2 + (Y-y_sink)**2)
+
+    #plt.streamplot(X, Y, u_sink, v_sink, density=2, linewidth=1, arrowsize=2, arrowstyle='->')
+    plt.scatter(x_sink, y_sink, color='b', s=80, marker='o', linewidth=0)
+    return u_sink, v_sink
 
 
 if __name__ == '__main__':
@@ -170,7 +258,17 @@ if __name__ == '__main__':
     args = argp.parse_args()
 
     th = Trajectories_Heatmap(bin_size=0.05, pickle_file=args.load)
-    th.run(vis=args.view, with_analysis=True)
+    #th.run(vis=args.view, with_analysis=True)
+    th.run(vis=False, with_analysis=True)
+    th.plot_heatmap()
 
-    th.plot_polygon(facecolor='green', alpha = 0.4)
+    interest_points = th.plot_polygon(vis=True, facecolor='green', alpha = 0.4)
+    print interest_points
     #pickle.dump(th.data, open("/home/strands/convex_points.p", "w"))
+
+
+    clustered_hull_pts = [[  66., -134.],  [96., -118.], [65., 5.], [27., 16.], \
+        [-83., -1.], [-106., -22.], \
+        [ -89., -54.], [-31., -148.]]
+
+    th.aeroplot_test(clustered_hull_pts)

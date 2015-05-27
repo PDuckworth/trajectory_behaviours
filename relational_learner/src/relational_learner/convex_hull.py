@@ -21,10 +21,6 @@ def _draw_triangle(p1, p2, p3, **kwargs):
 
 def draw_polygon(points, **kwargs):
 
-    #tmp = n.array([])
-    #for i in points:
-    #    n.append(tmp, [i], axis=0)
-
     x,y = [x[0] for x in zip(points.transpose())]
     p.fill(x,y, **kwargs)
     #time.sleep(0.2)

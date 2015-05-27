@@ -52,7 +52,7 @@ def Mongodb_to_list(res):
     return ep_list
 
 
-def run_all(turn_on_plotting=False, episode_store='relational_episodes'):
+def run_all(plotting=False, episode_store='relational_episodes'):
 
     (directories, config_path, input_data, date) = util.get_learning_config()
     (data_dir, qsr, eps, activity_graph_dir, learning_area) = directories
@@ -67,7 +67,7 @@ def run_all(turn_on_plotting=False, episode_store='relational_episodes'):
     #*******************************************************************#
     rospy.loginfo('Getting Region Knowledge from roslog...') 
     roi_knowledge, roi_temp_list = region_knowledge(soma_map, soma_config, \
-                                       sampling_rate=10, plot=turn_on_plotting)
+                                       sampling_rate=10, plot=plotting)
    
     #Filter trajectories which were deemed noise by using people_trajectory store
     list_of_poses, pose_data_dic = ot.filtered_trajectorys()
@@ -80,10 +80,13 @@ def run_all(turn_on_plotting=False, episode_store='relational_episodes'):
     #              Analyse the shape of the Trajectories                #
     #*******************************************************************# 
     pickle.dump(pose_data_dic, open(data_dir+"trajectory_dump/t_dict_text.p",'wt'))
-    pickle.dump(pose_data_dic, open(data_dir+"trajectory_dump/t_dict_binary.p",'wb'))
-
+    rospy.loginfo('Generating Heatmap of trajectories with velocity...')
     heatmap = th.Trajectories_Heatmap(bin_size=0.05, data=pose_data_dic)
-    heatmap.run(vis=True, with_analysis=True)
+
+    heatmap.run(vis=plotting, with_analysis=True)
+
+    interest_points = heatmap.plot_polygon(vis=plotting, facecolor='green', alpha = 0.4)
+    print "interesting points:\n", interest_points
 
     #*******************************************************************#
     #                  Obtain Episodes in ROI                           #
@@ -174,7 +177,7 @@ def run_all(turn_on_plotting=False, episode_store='relational_episodes'):
         #*******************************************************************#
         rospy.loginfo('Learning Temporal Measures')
         #print "traj times = ", trajectory_times, "\n"
-        smartThing.time_analysis(trajectory_times, plot=turn_on_plotting)
+        smartThing.time_analysis(trajectory_times, plot=plotting)
 
            
         #Add the region knowledge to smartThing
@@ -198,35 +201,28 @@ def run_all(turn_on_plotting=False, episode_store='relational_episodes'):
 
 class Offline_Learning(object):
 
-    def learn(self, turn_on_plotting=True, episode_store='relational_episodes'):
-    	r = run_all(turn_on_plotting, episode_store)
+    def learn(self, plotting=True, episode_store='relational_episodes'):
+    	r = run_all(plotting, episode_store)
 	
 
 
 if __name__ == "__main__":
     rospy.init_node("trajectory_learner")
 
-    turn_plotting = True
     if len(sys.argv) < 2:
-        rospy.logerr("usage: offlinelearning turn_on_plotting[0/1]")
+        rospy.logerr("usage: offlinelearning turn_on_plotting[0/1]. 0 by default.")
+        plotting=False
+    else:
+        plotting=int(sys.argv[1])
 
-    episode_store='relational_episodes'
     if len(sys.argv) < 3:
         rospy.logerr("usage: give an episode message store. `relational_episodes` by default.")
+        episode_store='relational_episodes'
+    else:
+        episode_store=sys.argv[2]
 
-    print int(sys.argv[1])
-    print sys.argv[2]
+    print "plotting = ", plotting
+    print "message store = ", episode_store
 
     o = Offline_Learning()
-    o.learn(turn_on_plotting=int(sys.argv[1]), episode_store=sys.argv[2])
-
-    
-    #Test:
-    data_dir = '/home/strands/STRANDS/'
-    file_ = os.path.join(data_dir + 'learning/roi_12_smartThing.p')
-    print file_
-
-    #smartThing=Learning(load_from_file=file_)
-    #print smartThing.methods
-    #print smartThing.code_book
-
+    o.learn(plotting, episode_store)

@@ -91,9 +91,7 @@ def filtered_trajectorys():
 
     res = msg_store.find(query)
     rospy.loginfo("Result: %s filtered trajectories" % res.count() ) 
-
-    spatial_downsampling_x, spatial_downsampling_y = {}, {}
-
+    rospy.loginfo("Getting UUIDs and poses...") 
     list_of_uuids, x, y = [], [], []
     for full_trajectory in res:
         list_of_uuids.append(full_trajectory["uuid"])
@@ -103,7 +101,7 @@ def filtered_trajectorys():
             y.append(entry["pose"]["position"]["y"])
 
     if len(x) != len(y): print "X and Y dimensions are different!"
-    
+     
     return list_of_uuids, {"x":x, "y":y}
 
 
