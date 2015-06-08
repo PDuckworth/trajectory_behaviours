@@ -70,18 +70,18 @@ def run_all(plotting=False, episode_store='relational_episodes'):
                                        sampling_rate=10, plot=plotting)
    
     #Filter trajectories which were deemed noise by using people_trajectory store
-    list_of_poses, pose_data_dic = ot.filtered_trajectorys()
-    set_of_uuids = set(list_of_poses)
-    if len(list_of_poses) != len(set_of_uuids):
-        print "Some non-unique UUIDs in people_trajectory"
-
+    #list_of_uuids, pose_data_dic = ot.filtered_trajectorys()
+    uuid_pose_dict = ot.filtered_trajectorys()
+    list_of_uuids = uuid_pose_dict.keys()
+    print len(list_of_uuids)
 
     #*******************************************************************#
     #              Analyse the shape of the Trajectories                #
     #*******************************************************************# 
-    pickle.dump(pose_data_dic, open(data_dir+"trajectory_dump/t_dict_text.p",'wt'))
+    pickle.dump(uuid_pose_dict, open(data_dir+"trajectory_dump/pose_data_dic_leeds_new_format.p",'wt'))
     rospy.loginfo('Generating Heatmap of trajectories with velocity...')
-    heatmap = th.Trajectories_Heatmap(bin_size=0.05, data=pose_data_dic)
+    sys.exit(1)
+    heatmap = th.Trajectories_Heatmap(bin_size=0.05, data=uuid_pose_dict)
 
     heatmap.run(vis=plotting, with_analysis=True)
 
@@ -104,7 +104,7 @@ def run_all(plotting=False, episode_store='relational_episodes'):
         trajectory_times = []
         for cnt, trajectory in enumerate(res):
             #print cnt
-            if trajectory["uuid"] not in set_of_uuids:
+            if trajectory["uuid"] not in list_of_uuids:
                 #print "UUID: %s filtered out" % str(trajectory["uuid"])
                 continue
             all_episodes[trajectory["uuid"]] = Mongodb_to_list(trajectory["episodes"])   

@@ -91,19 +91,23 @@ def filtered_trajectorys():
 
     res = msg_store.find(query)
     rospy.loginfo("Result: %s filtered trajectories" % res.count() ) 
-    rospy.loginfo("Getting UUIDs and poses...") 
-    list_of_uuids, x, y = [], [], []
+    rospy.loginfo("Getting UUIDs and poses...")
+
+    uuid_pose_dict = {}
     for full_trajectory in res:
-        list_of_uuids.append(full_trajectory["uuid"])
-       
+        uuid = full_trajectory["uuid"]
+        x, y, quarts = [], [], []
         for entry in full_trajectory["trajectory"]:
             x.append(entry["pose"]["position"]["x"])
             y.append(entry["pose"]["position"]["y"])
+            Quaternion = (entry["pose"]["orientation"]["y"], entry["pose"]["orientation"]["x"], \
+                entry["pose"]["orientation"]["z"], entry["pose"]["orientation"]["w"])
+            quarts.append(Quaternion)
 
-    if len(x) != len(y): print "X and Y dimensions are different!"
+        uuid_pose_dict[uuid] = {"x":x, "y":y, "quart":quarts}
+        if len(x) != len(y): print "X and Y dimensions are different!"
      
-    return list_of_uuids, {"x":x, "y":y}
-
+    return uuid_pose_dict
 
 
 def trajectory_object_dist(objects, trajectory_poses):
