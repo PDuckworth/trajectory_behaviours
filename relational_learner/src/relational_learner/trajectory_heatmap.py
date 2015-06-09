@@ -51,8 +51,6 @@ class Trajectories_Heatmap(object):
         for uuid, data in data.items():
             xs, ys, angles, velocities = [], [], [], []   #valid x and y's with positive velocity
 
-
-
             for cnt, (x_, y_) in enumerate(zip(data["x"], data["y"])):
                 hype=0
                 if cnt == 0:
@@ -245,10 +243,10 @@ if __name__ == '__main__':
     args = argp.parse_args()
 
     bin_size = 1
-    th = Trajectories_Heatmap(bin_size=bin_size, delta = 1, pickle_file=args.load, verbose=True)
+    th = Trajectories_Heatmap(bin_size=bin_size, delta = 1, pickle_file=args.load, verbose=False)
     th.run(vis=args.view, with_analysis=True)
 
-    p='/home/strands/STRANDS/docs'
+    p='/home/strands/STRANDS/trajectory_dump'
     th.markov_chain.display_and_save(layout='nx', view=True, path=p)
 
     interest_points = th.plot_polygon(vis=True, facecolor='green', alpha = 0.4)
