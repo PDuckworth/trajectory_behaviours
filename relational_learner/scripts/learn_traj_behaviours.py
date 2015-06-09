@@ -55,12 +55,11 @@ def Mongodb_to_list(res):
 def run_all(plotting=False, episode_store='relational_episodes'):
 
     (directories, config_path, input_data, date) = util.get_learning_config()
-    (data_dir, qsr, eps, activity_graph_dir, learning_area) = directories
+    (data_dir, qsr, trajs, activity_graph_dir, learning_area) = directories
     (soma_map, soma_config) = util.get_map_config(config_path)
     gs = GeoSpatialStoreProxy('geospatial_store','soma')
 
     msg_store = GeoSpatialStoreProxy('message_store', episode_store)
-
 
     #*******************************************************************#
     #                  Regions of Interest Knowledge                    #
@@ -78,12 +77,13 @@ def run_all(plotting=False, episode_store='relational_episodes'):
     #*******************************************************************#
     #              Analyse the shape of the Trajectories                #
     #*******************************************************************# 
-    pickle.dump(uuid_pose_dict, open(data_dir+"trajectory_dump/pose_data_dic_leeds_new_format.p",'wt'))
-    rospy.loginfo('Generating Heatmap of trajectories with velocity...')
-    sys.exit(1)
+    #pickle.dump(uuid_pose_dict, open(data_dir+"trajectory_dump/pose_data_dic_leeds_new_format.p",'wt'))
+    #rospy.loginfo('Generating Heatmap of trajectories with velocity...')
+    #sys.exit(1)
     heatmap = th.Trajectories_Heatmap(bin_size=0.05, data=uuid_pose_dict)
-
     heatmap.run(vis=plotting, with_analysis=True)
+
+    th.markov_chain.display_and_save(layout='nx', view=True, path=trajs)
 
     interest_points = heatmap.plot_polygon(vis=plotting, facecolor='green', alpha = 0.4)
     print "interesting points:\n", interest_points

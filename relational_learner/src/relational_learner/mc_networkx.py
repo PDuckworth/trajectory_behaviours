@@ -25,7 +25,6 @@ class Markov_Chain(object):
             start = "(%s, %s)" % (x, y)
             end = "(%s, %s)" % (new_x, new_y)
         else:
-
             if x is None and y is None:
                 start_node = "%s" % (start.replace(")", "").replace("(", ""))
                 pose = start_node.split(",")
