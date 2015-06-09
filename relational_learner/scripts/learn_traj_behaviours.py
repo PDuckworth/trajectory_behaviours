@@ -83,7 +83,7 @@ def run_all(plotting=False, episode_store='relational_episodes'):
     heatmap = th.Trajectories_Heatmap(bin_size=0.05, data=uuid_pose_dict)
     heatmap.run(vis=plotting, with_analysis=True)
 
-    th.markov_chain.display_and_save(layout='nx', view=True, path=trajs)
+    heatmap.markov_chain.display_and_save(layout='nx', view=True, path=trajs)
 
     interest_points = heatmap.plot_polygon(vis=plotting, facecolor='green', alpha = 0.4)
     print "interesting points:\n", interest_points
