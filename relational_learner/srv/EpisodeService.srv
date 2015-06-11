@@ -1,5 +1,6 @@
 human_trajectory/Trajectory trajectory
 bool qsr_visualisation
+string[] current_uuids_detected
 ---
 std_msgs/Header header
 string uuid

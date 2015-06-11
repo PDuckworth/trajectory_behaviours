@@ -19,26 +19,17 @@ class EpisodeClient(object):
 
     def __init__(self, qsr_visualisation):
         self.ret = None
-        self.uuid = ''
-        #self.pose = None
+        self.current_uuids_detected = []
         self.vis = qsr_visualisation
 
-        print "1", self.vis
         self.pub = rospy.Publisher("/trajectory_behaviours/episodes", episodesMsg, queue_size=10)
-        rospy.Subscriber("/human_trajectories/trajectories/batch", Trajectories, self.callback)
 
     def episode_client(self, Trajectory):
         rospy.wait_for_service('/episode_service')
         proxy = rospy.ServiceProxy('/episode_service', EpisodeService)  
-        req = EpisodeServiceRequest(Trajectory, self.vis)
+        req = EpisodeServiceRequest(Trajectory, self.vis, self.current_uuids_detected)
         ret = proxy(req)
         return ret
-
-    def callback(self, msg):
-        if len(msg.trajectories) > 0:
-            self.uuid = msg.trajectories[0].uuid
-            #self.pose = msg.trajectories[0].trajectory[-1].pose
-            self.ret = self.novelty_client(msg.trajectories[0])
 
 
 if __name__ == "__main__":
@@ -56,24 +47,25 @@ if __name__ == "__main__":
     #query ='''{"uuid": {"$exists" : "True"}}'''
     #query ='''{"uuid": "b74c11b7-e196-5e93-a1c0-a9fb6b93866f"}''' # 17000 poses
     #query ='''{"uuid": "3d99e112-2c92-52e7-81bf-61c3064cbb0d"}''' # 4700 poses
-    
     query ='''{"uuid": "ff75912c-ae5a-5658-8689-d1cf8f722cde"}''' #8 episodes
-
     q = ot.query_trajectories(query)
 
-    raw_input("finished query. Enter to continue.")
 
-    for cnt, i in enumerate(q.res.trajectories.trajectories):
+    ec.current_uuids_detected = []
+    for trajectory in q.res.trajectories.trajectories:
+        ec.current_uuids_detected.append(trajectory.uuid)
+    print "\nids = %s" % ec.current_uuids_detected
 
-        print "\n", cnt, i.uuid
+    for cnt, trajectory in enumerate(q.res.trajectories.trajectories):
+        print "\n passing ", cnt, trajectory.uuid
+        ret = ec.episode_client(trajectory)
+        print "returned"
 
-        ret = ec.episode_client(i)
-        #print ret.header
-        print ret.uuid, ret.soma_roi_id
-        print "len = ", len(ret.episodes)
-        print ret.episodes
-        #ec.pub.publish(ret)
-        #rospy.sleep(1) 
+        if ret.soma_roi_id != "":
+            ec.pub.publish(ret)
+            print "uuid = %s Episodes uploaded to database" % trajectory.uuid
+        else:
+            print "uuid = %s is outside of all soma roi" % trajectory.uuid
 
     #rospy.spin()
 
