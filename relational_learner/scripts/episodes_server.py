@@ -102,6 +102,8 @@ def handle_episodes(req):
     uuid = req.trajectory.uuid
     start_time = req.trajectory.start_time.secs
     print "\n1. Analysing trajectory: %s" %uuid
+    visualise_qsrs = req.qsr_visualisation
+    print "vis qsr = ", visualise_qsrs
 
     (data_dir, config_path) = util.get_path()
     (soma_map, soma_config) = util.get_map_config(config_path)
@@ -132,7 +134,7 @@ def handle_episodes(req):
     qsr_reader = tdr.Trajectory_Data_Reader(objects=objects, \
                                         trajectories=trajectory_poses, \
                                         objs_to_traj_map = closest_objs_to_trajs, \
-                                        roi=roi)
+                                        roi=roi, vis=visualise_qsrs)
 
     tr = qsr_reader.spatial_relations[uuid].trace
 
@@ -184,14 +186,14 @@ def handle_episodes(req):
 def generate_episodes():
     
     rospy.init_node('episode_server')
-                        #service_name      #service_type   #handler_function
-    s = rospy.Service('/episode_service', EpisodeService, handle_episodes)
+                       #service_name      #service_prototype  #handler_function
+    s = rospy.Service('/episode_service', EpisodeService,  handle_episodes)
     print "Ready to service some episodes..."
     rospy.spin()
-
 
 
 if __name__ == "__main__":
     stitching = stitch_uuids()
     generate_episodes()
+
 

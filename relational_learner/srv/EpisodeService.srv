@@ -1,4 +1,5 @@
 human_trajectory/Trajectory trajectory
+bool qsr_visualisation
 ---
 std_msgs/Header header
 string uuid

@@ -13,18 +13,18 @@ import relational_learner.obtain_trajectories as ot
 
 class EpisodeClient(object):
 
-    def __init__(self):
+    def __init__(self, qsr_visualisation):
         self.ret = None
         self.uuid = ''
         self.cnt = 0
-
+        self.vis = qsr_visualisation
         self.pub = rospy.Publisher("/trajectory_behaviours/episodes", episodesMsg, queue_size=10)
         rospy.Subscriber("/human_trajectories/trajectories/batch", Trajectories, self.callback)
 
     def episode_client(self, Trajectory):
         rospy.wait_for_service('/episode_service')
         proxy = rospy.ServiceProxy('/episode_service', EpisodeService)  
-        req = EpisodeServiceRequest(Trajectory)
+        req = EpisodeServiceRequest(Trajectory, self.vis)
         ret = proxy(req)
         return ret
 
@@ -43,8 +43,14 @@ class EpisodeClient(object):
 
 if __name__ == "__main__":
     rospy.init_node('episodes_client')
+    if len(sys.argv) == 2:
+        vis=bool(sys.argv[1])
+    else:
+        vis=False
+    print "Usage: QSR visualisation in RVIZ not selected. Turn_on = 1. 0 by default."
+    print "qsr_viz = ", vis
 
-    ec = EpisodeClient()
+    ec = EpisodeClient(vis)
 
     rospy.spin()
 
