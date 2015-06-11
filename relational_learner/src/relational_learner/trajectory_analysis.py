@@ -10,18 +10,18 @@ import convex_hull as ch
 import mc_networkx as mc
 import aeroplot as aero
 
-class Trajectories_Heatmap(object):
-    def __init__(self, bin_size, delta, pickle_file=None, data=None, verbose=False):
+class Discretise_Trajectories(object):
+    def __init__(self, bin_size, filter_vel, pickle_file=None, data=None, verbose=False):
         self.bin_size = bin_size
-        self.verbose = verbose
         self.data = None
+        self.velocity_delta = filter_vel
+        self.verbose = verbose
         self.heatmap = None
-        self.velocity_delta = delta
+
         if pickle_file or data:
-            self.set_data(pickle_file=pickle_file, data=data, bin_size=bin_size)
+            self.set_data(pickle_file=pickle_file, data=data)
         if verbose and self.data is None:
             print("Warning: data unitialized, run set_data")
-
 
     def set_data(self, bin_size=None, pickle_file=None, data=None):
         if pickle_file is None and data is None:
@@ -32,11 +32,12 @@ class Trajectories_Heatmap(object):
             with open(pickle_file, "rt") as f:
                 data = pickle.load(f)
 
-        self.data = self.get_binned_data_and_filter_by_velocity(data, bin_size)
+        self.data = self.get_binned_data_and_filter_by_velocity(data)
 
 
-    def get_binned_data_and_filter_by_velocity(self, data, bin_size=0.05):
+    def get_binned_data_and_filter_by_velocity(self, data):
 
+        bin_size = self.bin_size
         data_ret = {"x":[], "y":[], "angles":[], "velocities":[]}
 
         #Create 8 circular bins, with centers: [90, 45, 0, -45, -90, -135, 180, 135]
@@ -45,9 +46,9 @@ class Trajectories_Heatmap(object):
 
         #Rename the binned angles as per a clock face:
         binned_angles = {6:0, 5:1, 4:2, 3:3, 2:4, 1:5, 0:6, 8:6, 7:7}
-        mchain = mc.Markov_Chain('trajectories')
 
-        list_of_uuids = data.keys()
+        mchain = mc.Markov_Chain('trajectories')
+        print "number of subject ids: ", data.keys()
         for uuid, data in data.items():
             xs, ys, angles, velocities = [], [], [], []   #valid x and y's with positive velocity
 
@@ -94,11 +95,14 @@ class Trajectories_Heatmap(object):
             data_ret["angles"].extend(angles)
             data_ret["velocities"].extend(velocities)
 
+            print "len of vel= ",  len(velocities)
+            print velocities
+
         self.markov_chain = mchain
         print "valid datapoints after filtering on velocity = %s " % (len(data_ret["angles"]))
         return data_ret
 
-    def run(self, vis=False, with_analysis=False):
+    def heatmap_run(self, vis=False, with_analysis=False):
         self.compute_heatmap()
         self.filter_outliers(with_analysis=with_analysis)
         if vis:
@@ -236,15 +240,29 @@ class Trajectories_Heatmap(object):
 
 
 
+class Trajectory_Markov_Chain(object):
+    def __init__(self, bin_size, filter_vel, pickle_file=None, data=None, verbose=False):
+        self.bin_size = bin_size
+        self.verbose = verbose
+        self.data = None
+        self.heatmap = None
+        self.velocity_delta = filter_vel
+        if pickle_file or data:
+            self.set_data(pickle_file=pickle_file, data=data, bin_size=bin_size)
+        if verbose and self.data is None:
+            print("Warning: data unitialized, run set_data")
+
+
+
+
 if __name__ == '__main__':
     argp = argparse.ArgumentParser()
     argp.add_argument("-l", "--load", required=True, help="pickle file to load data from")
     argp.add_argument("-v", "--view", action="store_true", help="view the heatmap")
     args = argp.parse_args()
 
-    bin_size = 1
-    th = Trajectories_Heatmap(bin_size=bin_size, delta = 1, pickle_file=args.load, verbose=False)
-    th.run(vis=args.view, with_analysis=True)
+    dt = Discretise_Trajectories(bin_size=0.1, delta = 1, pickle_file=args.load, verbose=False)
+    dt.heatmap_run(vis=args.view, with_analysis=True)
 
     p='/home/strands/STRANDS/trajectory_dump'
     th.markov_chain.display_and_save(layout='nx', view=True, path=p)
