@@ -22,35 +22,42 @@ from mongodb_store.message_store import MessageStoreProxy
 
 class stitch_uuids(object):
     def __init__(self):
-        self.uuid = ""
-        self.stored_qsrs = []
+        self.stored_uuids = []
+        self.stored_qsrs = {}
         self.all_uuids = []
+
+    def check_stored_uuids(self, current_uuids):
+        for uuid in self.stored_uuids:
+            if uuid not in current_uuids:
+                self.stored_uuids.remove(uuid)
+                if uuid in self.stored_qsrs: del self.stored_qsrs[uuid]
+                
 
     def merge_qsr_worlds(self, uuid, data_reader):
         """Merges together trajectories which are published 
-           with the same UUID. Merge after QSRs have been generated."""
-        #If new UUID        
-        if self.uuid != uuid:
-            print "NEW ID"
-            self.uuid = uuid
-            #Initial QSRs of tractories:
-            self.stored_qsrs = data_reader.spatial_relations[uuid].trace
-            self.all_uuids.append(uuid)
+           with the same UUID as something currently being published.
+           Merge occurs after QSRs have been generated.
+        """
+
+        #If new UUID
+        if uuid not in self.stored_uuids:
+            print "NOTE: NEW UUID"
+            self.stored_uuids.append(uuid)
+            self.stored_qsrs[uuid] = data_reader.spatial_relations[uuid].trace
             return data_reader
-        #If same as previous UUID
+
+        #If UUID is still being published
         else:
-            print "NOTE: QSRs stitched together"
-            #print "NEW = ", reader.spatial_relations[uuid].trace
-            #print "STORED = ", self.stored_qsrs
-            len_of_stored = len(self.stored_qsrs)
-            #print len_of_stored
+            print "NOTE: QSR Trace stitched"
+            #print "NEW trace = ", len(data_reader.spatial_relations[uuid].trace)
+            #print "STORED trace lenth = ", len(self.stored_qsrs[uuid])
+            len_of_stored = len(self.stored_qsrs[uuid])
+
             for (key,pose) in data_reader.spatial_relations[uuid].trace.items():
-                self.stored_qsrs[key+len_of_stored] = pose
-            #print self.stored_qsrs  #QSRs stitched together
-            data_reader.spatial_relations[uuid].trace = self.stored_qsrs
+                self.stored_qsrs[uuid][key+len_of_stored] = pose
+            #print "STITCHED length = ", len(self.stored_qsrs[uuid])  #QSRs stitched together
+            data_reader.spatial_relations[uuid].trace = self.stored_qsrs[uuid]
             return data_reader
-
-
 
 
 class Importer(object):
@@ -102,6 +109,9 @@ def handle_episodes(req):
     uuid = req.trajectory.uuid
     start_time = req.trajectory.start_time.secs
     print "\n1. Analysing trajectory: %s" %uuid
+    visualise_qsrs = req.qsr_visualisation
+    print "vis qsr = ", visualise_qsrs
+    current_uuids = req.current_uuids_detected
 
     (data_dir, config_path) = util.get_path()
     (soma_map, soma_config) = util.get_map_config(config_path)
@@ -132,7 +142,8 @@ def handle_episodes(req):
     qsr_reader = tdr.Trajectory_Data_Reader(objects=objects, \
                                         trajectories=trajectory_poses, \
                                         objs_to_traj_map = closest_objs_to_trajs, \
-                                        roi=roi)
+                                        roi=roi, vis=visualise_qsrs, \
+                                        current_uuids=current_uuids)
 
     tr = qsr_reader.spatial_relations[uuid].trace
 
@@ -140,9 +151,16 @@ def handle_episodes(req):
     #   print tr[i].qsrs['Printer (photocopier)_2,trajectory'].qsr
 
     """3.5 Check the uuid is new (or stitch QSRs together)"""
-    stitching.merge_qsr_worlds(uuid, qsr_reader)
-    tq1=time.time()
+    print "currently in memory = ", stitching.stored_uuids
+    stitching.check_stored_uuids(current_uuids)
+    print "currently published ids = ", current_uuids
+    print "still in memory = ", stitching.stored_uuids
 
+    stitching.merge_qsr_worlds(uuid, qsr_reader)
+
+
+
+    tq1=time.time()
 
     """4. Episodes"""
     te0=time.time()
@@ -184,14 +202,14 @@ def handle_episodes(req):
 def generate_episodes():
     
     rospy.init_node('episode_server')
-                        #service_name      #service_type   #handler_function
-    s = rospy.Service('/episode_service', EpisodeService, handle_episodes)
+                       #service_name      #service_prototype  #handler_function
+    s = rospy.Service('/episode_service', EpisodeService,  handle_episodes)
     print "Ready to service some episodes..."
     rospy.spin()
-
 
 
 if __name__ == "__main__":
     stitching = stitch_uuids()
     generate_episodes()
+
 

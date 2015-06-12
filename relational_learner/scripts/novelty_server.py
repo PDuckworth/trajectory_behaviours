@@ -72,7 +72,7 @@ def handle_novelty_detection(req):
     print "Length of Episodes = ", len(all_episodes[episodes_file])
  
     (directories, config_path, input_data, date) = util.get_learning_config()
-    (data_dir, qsr, eps, graphs, learning_area) = directories
+    (data_dir, qsr, trajs, graphs, learning_area) = directories
     #(data_dir, config_path, params, date) = util.get_qsr_config()
     (soma_map, soma_config) = util.get_map_config(config_path)
     
