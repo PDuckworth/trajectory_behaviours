@@ -1,5 +1,6 @@
-relational_learner/episodesMsg episodes
+relational_learner/episodes_to_novelty episodes
+bool visualise_graphs
 ---
-float64 spatial_dist
+float64[] spatial_nov
 float64[] temporal_nov
 float64 roi_knowledge

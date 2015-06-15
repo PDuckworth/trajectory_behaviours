@@ -66,7 +66,7 @@ class Importer(object):
         self._client = pymongo.MongoClient(rospy.get_param("mongodb_host"),
                                            rospy.get_param("mongodb_port"))
 
-        self._store_client = MessageStoreProxy(collection="relational_episodes_test")
+        self._store_client = MessageStoreProxy(collection="relational_episodes")
 
 
 def get_episode_msg(all_episodes):
@@ -180,7 +180,7 @@ def handle_episodes(req):
     h = req.trajectory.header
     meta = {}
 
-    msg = episodesMsg(header=h, uuid=uuid, soma_roi_id=str(roi),  soma_map=soma_map, \
+    msg = episodes_to_mongo(header=h, uuid=uuid, soma_roi_id=str(roi),  soma_map=soma_map, \
                     soma_config=soma_config, start_time=start_time, \
                     episodes=get_episode_msg(ep.all_episodes[episodes_file]))
 
