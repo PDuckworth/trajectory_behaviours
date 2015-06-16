@@ -52,6 +52,8 @@ catkin_python_setup()
    novelTrajectory.msg
    episodeMsg.msg
    episodesMsg.msg
+   episodes_to_novelty.msg
+   #episodes_to_mongo.msg
    activityGraphMsg.msg
    RegionKnowledgeMsg.msg
 #   Message2.msg

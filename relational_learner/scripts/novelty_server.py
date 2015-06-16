@@ -57,6 +57,9 @@ def episodesMsg_to_list(req):
 
 def handle_novelty_detection(req):
 
+    visualise = req.visualise_graphs
+    print "visualise Graph = ", visualise
+
     """1. Get data from EpisodesMsg"""
     t0=time.time()
     uuid = req.episodes.uuid
@@ -88,7 +91,7 @@ def handle_novelty_detection(req):
     ta0=time.time()
 
     activity_graphs = gh.generate_graph_data(all_episodes, data_dir, \
-            params, tag, test=True)
+            params, tag, test=True, vis=visualise)
 
     #print "\n  ACTIVITY GRAPH: \n", activity_graphs[episodes_file].graph 
     ta1=time.time()
@@ -146,20 +149,6 @@ def handle_novelty_detection(req):
     std = estimator.cluster_dist_std[closest_cluster[0]]
     print "Mean & std = ",  mean, std
 
-    if dst > mean+std:
-        print ">>> NOVEL1\n"
-        dst=1.0
-    elif dst > mean + 2*std:
-        print ">>> NOVEL2\n"
-        dst=2.0
-    elif  dst > mean + 3*std:
-        print ">>> NOVEL3\n"
-        dst=3.0
-    else:
-        print ">>> not novel\n"
-        dst=0.0
-
-
     """8. Time Analysis"""
     fitting = smartThing.methods['time_fitting']
     dyn_cl = smartThing.methods['time_dyn_clst']
@@ -190,7 +179,7 @@ def handle_novelty_detection(req):
     print "  AG took: ", ta1-ta0, "  secs."
     #print "  Mongo upload took: ", tm1-tm0, "  secs."
 
-    return NoveltyDetectionResponse(dst, [pc, pf], th)
+    return NoveltyDetectionResponse([dst, mean, std], [pc, pf], th)
 
 
 def calculate_novelty():

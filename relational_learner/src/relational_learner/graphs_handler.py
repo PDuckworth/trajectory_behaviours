@@ -32,7 +32,7 @@ def AG_setup(input_data, date, roi):
 #**************************************************************#
 
 def generate_graph_data(episodes, data_dir, params, tag,
-                         __out=False, test=False):
+                         __out=False, test=False, vis=False):
     t0 = time.time()
     cnt=0
     activity_graphs = {}
@@ -45,7 +45,7 @@ def generate_graph_data(episodes, data_dir, params, tag,
         activity_graphs[episodes_file] = Activity_Graph(episodes_list, params)
         activity_graphs[episodes_file].get_valid_graphlets()
 
-        if __out and cnt == 0: graph_check(activity_graphs, episodes_file) #print details of one activity graph
+        if vis: graph_check(activity_graphs, episodes_file) #print activity graphs to file
         cnt+=1
         if __out: print cnt
     
@@ -62,18 +62,19 @@ def generate_graph_data(episodes, data_dir, params, tag,
 
 
 def graph_check(gr, ep_file):
-    """Prints to /tmp lots """
+    """Prints dotfile to /tmp lots """
     gr[ep_file].graph2dot('/tmp/act_gr.dot', False)
     os.system('dot -Tpng /tmp/act_gr.dot -o /tmp/act_gr.png')
     print "graph: " + repr(ep_file)
     print gr[ep_file].graph
 
+    """
     gr2 = gr[ep_file].valid_graphlets
     for cnt_, i in enumerate(gr2[gr2.keys()[0]].values()):
         i.graph2dot('/tmp/graphlet.dot', False) 
         cmd = 'dot -Tpng /tmp/graphlet.dot -o /tmp/graphlet_%s.png' % cnt_
         os.system(cmd)
-
+    """
 
 
 def generate_feature_space(data_dir, tag, __out=False):
