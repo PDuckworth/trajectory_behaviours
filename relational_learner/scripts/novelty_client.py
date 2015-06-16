@@ -5,6 +5,7 @@ import rospy
 from std_msgs.msg import String
 from relational_learner.srv import *
 from relational_learner.msg import *
+import numpy as np
 import cv2
 import matplotlib.pyplot as plt
 
@@ -150,6 +151,9 @@ if __name__ == "__main__":
 
     nc = NoveltyClient(0.05, vis_graph)
     
+    img = np.zeros((10,10,3),dtype=np.uint8)
+    #cv2.imwrite('/tmp/act_gr.png',img)
+    cv2.imwrite('/tmp/nov_gr.png',img)
     while not rospy.is_shutdown():
         if vis_graph:
             try:
