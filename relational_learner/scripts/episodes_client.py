@@ -7,7 +7,7 @@ import sys
 import rospy
 from std_msgs.msg import String
 from relational_learner.srv import *
-from relational_learner.msg import *
+from relational_learner.msg import episodes_to_novelty
 from human_trajectory.msg import Trajectories
 
 import relational_learner.obtain_trajectories as ot

@@ -14,7 +14,7 @@ import relational_learner.obtain_trajectories as ot
 import novelTrajectories.traj_data_reader as tdr
 import novelTrajectories.config_utils as util
 
-from relational_learner.msg import *
+from relational_learner.msg import episodeMsg, episodesMsg
 from relational_learner.srv import *
 from mongodb_store.message_store import MessageStoreProxy
 
@@ -112,12 +112,13 @@ def handle_episodes(req):
     visualise_qsrs = req.qsr_visualisation
     print "vis qsr = ", visualise_qsrs
     current_uuids = req.current_uuids_detected
-
+    
     (data_dir, config_path) = util.get_path()
     (soma_map, soma_config) = util.get_map_config(config_path)
     
     trajectory_poses = {uuid : get_poses(req.trajectory)}
     print "LENGTH of Trajectory: ", len(trajectory_poses[uuid])
+    ti1=time.time()
 
     """2. Region and Objects"""  
     gs = GeoSpatialStoreProxy('geospatial_store', 'soma')
@@ -126,8 +127,12 @@ def handle_episodes(req):
 
     roi = two_proxies.trajectory_roi(req.trajectory.uuid, trajectory_poses[uuid])
     if roi == None: return EpisodeServiceResponse(uuid=uuid)
-        
+
+    ti2=time.time()
+    #This currently takes too long!
     objects = two_proxies.roi_objects(roi)
+    ti3=time.time()
+
     print "\nROI: ", roi
     #print "\n  Objects: ", objects
     if objects == None: 
@@ -136,6 +141,7 @@ def handle_episodes(req):
     
     """2.5 Get the closest objects to the trajectory"""
     closest_objs_to_trajs = ot.trajectory_object_dist(objects, trajectory_poses)
+    ti4=time.time()
 
     """3. QSRLib data parser"""#
     tq0=time.time()
@@ -157,40 +163,41 @@ def handle_episodes(req):
     print "still in memory = ", stitching.stored_uuids
 
     stitching.merge_qsr_worlds(uuid, qsr_reader)
-
-
-
     tq1=time.time()
 
     """4. Episodes"""
     te0=time.time()
     ep = tdr.Episodes(reader=qsr_reader)
-    te1=time.time()
     #print "\n  ALL EPISODES :"
     #for t in ep.all_episodes:
     #    for o in ep.all_episodes[t]:
     #        print ep.all_episodes[t][o]
-        
+    
     episodes_file = ep.all_episodes.keys()[0] #This gives the ID of the Trajectory
     uuid, start, end = episodes_file.split('__')  #Appends the start and end frame #
     print episodes_file
+    te1=time.time()
 
     """6.5 Upload data to Mongodb"""
+    
     tm0 = time.time()
     h = req.trajectory.header
     meta = {}
 
-    msg = episodes_to_mongo(header=h, uuid=uuid, soma_roi_id=str(roi),  soma_map=soma_map, \
+    msg = episodesMsg(header=h, uuid=uuid, soma_roi_id=str(roi),  soma_map=soma_map, \
                     soma_config=soma_config, start_time=start_time, \
                     episodes=get_episode_msg(ep.all_episodes[episodes_file]))
 
     #MongoDB Query - to see whether to insert new document, or update an existing doc.
     query = {"uuid" : str(uuid)} 
     p_id = Importer()._store_client.update(message=msg, message_query=query, meta=meta, upsert=True)
-
     tm1 = time.time()
 
     print "\nService took: ", time.time()-t0, "  secs."
+    print "  Initialising srv message: ", ti1-t0, "  secs."
+    print "  Initialising proxies: ", ti2-ti1, "  secs."
+    print "  Initialising objects: ", ti3-ti2, "  secs."
+    print "  Initialising object distances: ", ti4-ti3, "  secs."
     print "  Data Reader took: ", tq1-tq0, "  secs."
     print "  Episodes took: ", te1-te0, "  secs."
     print "  Mongo upload took: ", tm1-tm0, "  secs."
