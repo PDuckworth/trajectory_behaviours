@@ -179,7 +179,7 @@ def handle_novelty_detection(req):
     print "  AG took: ", ta1-ta0, "  secs."
     #print "  Mongo upload took: ", tm1-tm0, "  secs."
 
-    return NoveltyDetectionResponse([dst, mean, std], [pc, pf], th)
+    return NoveltyDetectionResponse([dst, mean, std], [start_time, pc, pf], th)
 
 
 def calculate_novelty():

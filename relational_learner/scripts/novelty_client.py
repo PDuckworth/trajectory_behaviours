@@ -44,14 +44,32 @@ class NoveltyClient(object):
             print self.ret
             self.cnt+=1 
 
-            if len(self.ret.temporal_nov)==0: self.ret.temporal_nov=[0, 0]
+            if len(self.ret.temporal_nov)==0: self.ret.temporal_nov=[0, 0, 0]
             
             cardcheck_pub = self.novlogic.cardcheck_msg(self.uuid, self.ret)
             if cardcheck_pub != "":
                 self.pub.publish(self.uuid)
                 self.published_uuids.append(self.uuid)
 
-            if self.vis: self.novlogic.plot_results(self.uuid, self.rotate)
+            if self.vis: 
+                self.novlogic.plot_results(self.uuid, self.rotate)
+                self.call_temporal_graph()
+
+
+     def call_temporal_graph(self):
+        print "Region = ", self.roi
+        """
+        self.roi
+        (start_time, pc, pf) = self.ret.temporal_nov
+        load pickle file
+            file_ = os.path.join('/home/strands/STRANDS/learning/roi_' + self.roi + '_smartThing.p')
+            smartThing=la.Learning(load_from_file=file_)
+
+        fitting = smartThing.methods['time_fitting']
+        dyn_cl = smartThing.methods['time_dyn_clst']
+       
+        check /src/relational_learning/learningArea.py and plot_temporal for details.
+        """
 
 
 class NoveltyScoreLogic(object):
@@ -73,7 +91,7 @@ class NoveltyScoreLogic(object):
         else: spatial_nov = 0
 
         if ret.temporal_nov != []:
-            (temp1, temp2) = ret.temporal_nov
+            (start_time, temp1, temp2) = ret.temporal_nov
         else:
             temp1 = temp2 = 0
 
@@ -109,9 +127,10 @@ class NoveltyScoreLogic(object):
             for i in remove:
                 del self.spatial_results[i]
             print "remove", remove
-            self.call_graph() #Load the graph only if all people in the scene have been analysed
+            self.call_spatial_graph() #Load the graph only if all people in the scene have been analysed
 
-    def call_graph(self):
+
+    def call_spatial_graph(self):
         print "PLOTTING DICT: ", self.spatial_results.keys()
        
         fig = plt.figure()
@@ -138,6 +157,10 @@ class NoveltyScoreLogic(object):
         #ax.set_yticklabels(regions)
         plt.savefig('/tmp/nov_gr.png', bbox_inches='tight', dpi=100)
 
+
+
+
+
 if __name__ == "__main__":
     rospy.init_node('novelty_client')
     print "novelty client running..."
@@ -150,21 +173,23 @@ if __name__ == "__main__":
     print "Graph viz = ", vis_graph
 
     nc = NoveltyClient(0.05, vis_graph)
-    
+    frame = 1
     img = np.zeros((10,10,3),dtype=np.uint8)
-    #cv2.imwrite('/tmp/act_gr.png',img)
+    cv2.imwrite('/tmp/act_gr.png',img)
     cv2.imwrite('/tmp/nov_gr.png',img)
     while not rospy.is_shutdown():
         if vis_graph:
             try:
                 img = cv2.imread('/tmp/act_gr.png')
+                #cv2.imwrite('/tmp/test1/test1_'+str(frame)+'_.png',img)
                 img = cv2.resize(img, (0,0), fx=0.5, fy=0.5)
                 cv2.imshow('Activity_Graph',img)
 
                 img2 = cv2.imread('/tmp/nov_gr.png')
+                # cv2.imwrite('/tmp/test1/test2_'+str(frame)+'_.png',img)
                 img2 = cv2.resize(img2, (0,0), fx=1, fy=1)
                 cv2.imshow('Novelty_Scores',img2)
-
+                frame+=1
                 cv2.waitKey(1)
             except Exception:
                 pass
