@@ -18,7 +18,10 @@ from relational_learner.Activity_Graph import Activity_Graph
 from mongodb_store.message_store import MessageStoreProxy
 
 #from std_msgs.msg import Header
-
+import cv2
+import cv_bridge
+import matplotlib.pyplot as plt
+from sensor_msgs.msg import Image
 
 
 class Importer(object):
@@ -54,138 +57,265 @@ def episodesMsg_to_list(req):
     return all_episodes
 
 
+class novelty_class(object):
+    def __init__(self):
+        self.pub_A = rospy.Publisher('/novelty/activity_graph', \
+                    Image, latch=True, queue_size=1)
+        self.pub_T = rospy.Publisher('/novelty/temporal_novelty', \
+                    Image, latch=True, queue_size=1)
+        self.pub_S = rospy.Publisher('/novelty/spatial_novelty', \
+                    Image, latch=True, queue_size=1)   
 
-def handle_novelty_detection(req):
+        self.spatial_results = {}
+        self.keep_ids = []
+        self.rotate = False
+        self.fig1 = plt.figure()
+        self.fig2 = plt.figure()
 
-    visualise = req.visualise_graphs
-    print "visualise Graph = ", visualise
+    def publish_temp_image(self, pc, pf, time_of_day, roi):
+        self.fig1.clf()
+        ax1 = self.fig1.add_subplot(111)
+        plt.sca(ax1)
 
-    """1. Get data from EpisodesMsg"""
-    t0=time.time()
-    uuid = req.episodes.uuid
-    print "\nUUID = ", uuid
-    roi = req.episodes.soma_roi_id
-    print "ROI = ", roi
-    eps_soma_map = req.episodes.soma_map
-    eps_soma_config = req.episodes.soma_config
-    start_time = req.episodes.start_time
-    all_episodes = episodesMsg_to_list(req)
+        plot_interval=900.0
+        timestamps, pc_all, pf_all = self.get_temporal_values(plot_interval)
+        plot_vec = [t/3600.0 for t in timestamps]
+        width=0.01
+        plt.plot(plot_vec,pc_all, color='r', label='dynamic clustering')
+        plt.plot(plot_vec,pf_all,label='GMM fitting')
+        plt.plot(time_of_day/3600.0, pc, label='dyn novelty', color='c', marker='o', markersize=15)
+        plt.plot(time_of_day/3600.0, pf, label='gmm novelty', color='g', marker='o', markersize=15)
 
-    episodes_file = all_episodes.keys()[0]
-    print "Length of Episodes = ", len(all_episodes[episodes_file])
- 
-    (directories, config_path, input_data, date) = util.get_learning_config()
-    (data_dir, qsr, trajs, graphs, learning_area) = directories
-    #(data_dir, config_path, params, date) = util.get_qsr_config()
-    (soma_map, soma_config) = util.get_map_config(config_path)
-    
-    if eps_soma_map != soma_map: raise ValueError("Config file soma_map not matching published episodes")
-    if eps_soma_config != soma_config: raise ValueError("Config file soma_config not matching published episodes")
+        plt.xlim([0,24])
+        ax1.set_xticks(np.arange(0,24))
 
-    params, tag = gh.AG_setup(input_data, date, roi)
+        plt.xlabel('time of day')
+        plt.ylabel('probability')
+        plt.legend(loc = 'best')
+        filename='/tmp/temporal_plot_%s.png' % roi
+        plt.savefig(filename, bbox_inches='tight', dpi=100)  
+        img = cv2.imread(filename)
+        activity_graph_msg = cv_bridge.CvBridge().cv2_to_imgmsg(img, encoding="bgr8")
+        self.pub_T.publish(activity_graph_msg)  
 
-    print "params = ", params
-    print "tag = ", tag
+    def get_temporal_values(self, plot_interval, period=86400):
+        pc = []
+        pf = []
+        #query model at these points to generate graph:
+        timestamps = np.arange(0,period,plot_interval) 
+        for v in timestamps:
+            pc.append(self.dyn_cl.query_clusters(v))
+            pf.append(self.fitting.query_model(v))
+        return timestamps, pc, pf 
+        
+    def publish_AG_image(self):
+        img = cv2.imread('/tmp/act_gr.png')
+        activity_graph_msg = cv_bridge.CvBridge().cv2_to_imgmsg(img, encoding="bgr8")
+        self.pub_A.publish(activity_graph_msg)
 
-    """4. Activity Graph"""
-    ta0=time.time()
+    def plot_results(self, uuid, (dst, mean, std)):
 
-    activity_graphs = gh.generate_graph_data(all_episodes, data_dir, \
-            params, tag, test=True, vis=visualise)
+        self.keep_ids.append(uuid)
+        if uuid in self.spatial_results: self.spatial_results[uuid][0:9] = self.spatial_results[uuid][1:10]
+        else: self.spatial_results[uuid] = [(0,0,0)]*10
+        self.spatial_results[uuid][9] = (dst, mean, std) 
 
-    #print "\n  ACTIVITY GRAPH: \n", activity_graphs[episodes_file].graph 
-    ta1=time.time()
-    
-    """5. Load spatial model"""
-    print "\n  MODELS LOADED :"
-    file_ = os.path.join(data_dir + 'learning/roi_' + roi + '_smartThing.p')
-    smartThing=la.Learning(load_from_file=file_)
-    if smartThing.flag == False: return NoveltyDetectionResponse()
+        #print "keeps", self.keep_ids
+        remove = []
+        if self.rotate:
+            for key in self.spatial_results:
+                if key not in self.keep_ids: remove.append(key)
+            self.keep_ids = []
 
-    print "code book = ", smartThing.code_book
+            for i in remove:
+                del self.spatial_results[i]
+            #print "remove", remove
+            self.call_spatial_graph() #Load the graph only if all people in the scene have been analysed
 
-    """6. Create Feature Vector""" 
-    test_histogram = activity_graphs[episodes_file].get_histogram(smartThing.code_book)
-    print "HISTOGRAM = ", test_histogram
-  
 
-    """6.5 Upload data to Mongodb"""
-    """activityGraphMsg:
-            std_msgs/Header header
-            string uuid
-            string soma_roi_id
-            string soma_map
-            string soma_config
-            int64[] codebook
-            float32[] histogram
-    """
-    #header = req.episodes.trajectory.header
-    #meta = {"map":'uob_library'}
+    def call_spatial_graph(self):
+        #print "PLOTTING DICT: ", self.spatial_results.keys()
+        self.fig2.clf()
+        ax2 = self.fig2.add_subplot(111)
+        plt.sca(ax2)
+        y_max=0
+        for cnt, (key, values) in enumerate(self.spatial_results.items()):
+            x=[]
+            y, mean, std = [], [], []
+            for x_, (y_, mean_, std_) in enumerate(values):
+                if y_ == 0: continue 
+                x.append(x_)
+                y.append(y_)
+                mean.append(mean_)
+                std.append(std_)
+            print "X, Y = ", x, y, mean, std
+            if max(y)>y_max: y_max=max(y)
+            if max(std)>y_max: y_max=max(std)
+            plt.plot(x,y, '+-', linewidth=1.0, label=key)
+            plt.plot(x,mean, '--', linewidth=0.5, label='  mean')
+            plt.plot(x,std, '--', linewidth=0.5, label='  std')
+        ax2.legend()
+        plt.xlim(0, 10)
+        plt.ylim(0, y_max*1.5)
 
-    #tm0 = time.time()
-    #ag =  activityGraphMsg(
-    #            header=header, uuid=req.episodes.uuid, roi=roi, \
-    #            histogram = test_histogram, codebook = smartThing.code_book, \
-    #            episodes=get_episode_msg(ep.all_episodes[episodes_file]))
-   
-    #query = {"uuid" : str(uuid)} 
-    #p_id = Importer()._store_client.update(message=ag, message_query=query,\
-    #                                       meta=meta, upsert=True)
-    #tm1 = time.time()
+        ax2.set_ylabel("Distance to Learnt Clusters")
+        ax2.set_xlabel("time (in trajectory_publisher msgs)")
+        #ax2.set_yticklabels(regions)
+        plt.savefig('/tmp/nov_gr.png', bbox_inches='tight', dpi=100)
+        img = cv2.imread('/tmp/nov_gr.png')
+        spatial_graph_msg = cv_bridge.CvBridge().cv2_to_imgmsg(img, encoding="bgr8")
+        self.pub_S.publish(spatial_graph_msg)
 
-    """7. Calculate Distance to clusters"""
-    estimator = smartThing.methods['kmeans']
-    closest_cluster = estimator.predict(test_histogram)
-    
-    print "INERTIA = ", estimator.inertia_
-    #print "CLUSTER CENTERS = ", estimator.cluster_centers_
 
-    a = test_histogram
-    b = estimator.cluster_centers_[closest_cluster]
-    dst = distance.euclidean(a,b)
-    print "\nDISTANCE = ", dst
+    def handle_novelty_detection(self, req):
 
-    mean = estimator.cluster_dist_means[closest_cluster[0]]
-    std = estimator.cluster_dist_std[closest_cluster[0]]
-    print "Mean & std = ",  mean, std
+        print "visualise Graph = ", req.visualise_graphs
 
-    """8. Time Analysis"""
-    fitting = smartThing.methods['time_fitting']
-    dyn_cl = smartThing.methods['time_dyn_clst']
+        """1. Get data from EpisodesMsg"""
+        t0=time.time()
+        uuid = req.episodes.uuid
+        print "\nUUID = ", uuid
+        roi = req.episodes.soma_roi_id
+        print "ROI = ", roi
+        eps_soma_map = req.episodes.soma_map
+        eps_soma_config = req.episodes.soma_config
+        start_time = req.episodes.start_time
+        all_episodes = episodesMsg_to_list(req)
 
-    pc = dyn_cl.query_clusters(start_time%86400)
-    pf = fitting.query_model(start_time%86400)
-    
-    print "PC = ", pc
-    print "PF = ", pf
+        episodes_file = all_episodes.keys()[0]
+        print "Length of Episodes = ", len(all_episodes[episodes_file])
+     
+        (directories, config_path, input_data, date) = util.get_learning_config()
+        (data_dir, qsr, trajs, graphs, learning_area) = directories
+        #(data_dir, config_path, params, date) = util.get_qsr_config()
+        (soma_map, soma_config) = util.get_map_config(config_path)
+        
+        if eps_soma_map != soma_map: raise ValueError("Config file soma_map not matching published episodes")
+        if eps_soma_config != soma_config: raise ValueError("Config file soma_config not matching published episodes")
 
-    """9. ROI Knowledge"""
-    try:
-        region_knowledge = smartThing.methods['roi_knowledge']
-        temporal_knowledge = smartThing.methods['roi_temp_list']
-        print "Region Knowledge Score = ", region_knowledge
-        print "Hourly score = ", region_knowledge
+        params, tag = gh.AG_setup(input_data, date, roi)
 
-        t = datetime.fromtimestamp(start_time)
-        print "Date/Time = ", t
-        th = temporal_knowledge[t.hour]
-        print "Knowledge per hour = ", th
+        print "params = ", params
+        print "tag = ", tag
 
-    except KeyError:
-        print "No Region knowledge in `region_knowledge` db"
-        th = 0
- 
-    print "\n Service took: ", time.time()-t0, "  secs."
-    print "  AG took: ", ta1-ta0, "  secs."
-    #print "  Mongo upload took: ", tm1-tm0, "  secs."
+        """4. Activity Graph"""
+        ta0=time.time()
 
-    return NoveltyDetectionResponse([dst, mean, std], [start_time, pc, pf], th)
+        activity_graphs = gh.generate_graph_data(all_episodes, data_dir, \
+                params, tag, test=True, vis=req.visualise_graphs)
+
+        if req.visualise_graphs: self.publish_AG_image()
+
+
+        #print "\n  ACTIVITY GRAPH: \n", activity_graphs[episodes_file].graph 
+        ta1=time.time()
+        
+        """5. Load spatial model"""
+        print "\n  MODELS LOADED :"
+        file_ = os.path.join(data_dir + 'learning/roi_' + roi + '_smartThing.p')
+        smartThing=la.Learning(load_from_file=file_)
+        if smartThing.flag == False: return NoveltyDetectionResponse()
+
+        print "code book = ", smartThing.code_book
+
+        """6. Create Feature Vector""" 
+        test_histogram = activity_graphs[episodes_file].get_histogram(smartThing.code_book)
+        print "HISTOGRAM = ", test_histogram
+      
+
+        """6.5 Upload data to Mongodb"""
+        """activityGraphMsg:
+                std_msgs/Header header
+                string uuid
+                string soma_roi_id
+                string soma_map
+                string soma_config
+                int64[] codebook
+                float32[] histogram
+        """
+        #header = req.episodes.trajectory.header
+        #meta = {"map":'uob_library'}
+
+        #tm0 = time.time()
+        #ag =  activityGraphMsg(
+        #            header=header, uuid=req.episodes.uuid, roi=roi, \
+        #            histogram = test_histogram, codebook = smartThing.code_book, \
+        #            episodes=get_episode_msg(ep.all_episodes[episodes_file]))
+       
+        #query = {"uuid" : str(uuid)} 
+        #p_id = Importer()._store_client.update(message=ag, message_query=query,\
+        #                                       meta=meta, upsert=True)
+        #tm1 = time.time()
+
+        """7. Calculate Distance to clusters"""
+        estimator = smartThing.methods['kmeans']
+        closest_cluster = estimator.predict(test_histogram)
+        
+        print "INERTIA = ", estimator.inertia_
+        #print "CLUSTER CENTERS = ", estimator.cluster_centers_
+
+        a = test_histogram
+        b = estimator.cluster_centers_[closest_cluster]
+        dst = distance.euclidean(a,b)
+        print "\nDISTANCE = ", dst
+
+        mean = estimator.cluster_dist_means[closest_cluster[0]]
+        std = estimator.cluster_dist_std[closest_cluster[0]]
+        print "Mean & std = ",  mean, std
+
+        if dst > mean + std: spatial_nov = 1
+        elif dst > mean + 2*std: spatial_nov = 2
+        elif dst > mean + 3*std: spatial_nov = 3
+        else: spatial_nov = 0
+        print "Spatial flag = ", spatial_nov
+        self.rotate = req.episodes.rotate_image
+        std_1 = mean+std
+        if req.visualise_graphs: self.plot_results(uuid, (dst, mean, std_1))
+
+        """8. Time Analysis"""
+        self.fitting = smartThing.methods['time_fitting']
+        self.dyn_cl = smartThing.methods['time_dyn_clst']
+
+        time_of_day = start_time%86400
+        pc = self.dyn_cl.query_clusters(time_of_day)
+        pf = self.fitting.query_model(time_of_day)
+        
+        print "PC = ", pc
+        print "PF = ", pf
+
+        if req.visualise_graphs: self.publish_temp_image(pc, pf, time_of_day, roi)
+
+        """9. ROI Knowledge"""
+        try:
+            region_knowledge = smartThing.methods['roi_knowledge']
+            temporal_knowledge = smartThing.methods['roi_temp_list']
+            print "Region Knowledge Score = ", region_knowledge
+            print "Hourly score = ", region_knowledge
+
+            t = datetime.fromtimestamp(start_time)
+            print "Date/Time = ", t
+            th = temporal_knowledge[t.hour]
+            print "Knowledge per hour = ", th
+
+        except KeyError:
+            print "No Region knowledge in `region_knowledge` db"
+            th = 0
+     
+        print "\n Service took: ", time.time()-t0, "  secs."
+        print "  AG took: ", ta1-ta0, "  secs."
+        #print "  Mongo upload took: ", tm1-tm0, "  secs."
+
+        return NoveltyDetectionResponse(spatial_nov, [pc, pf], th)
 
 
 def calculate_novelty():
     rospy.init_node('novelty_server')
+    n = novelty_class()
+    
+
                         #service_name       #serive_type       #handler_function
-    s = rospy.Service('/novelty_detection', NoveltyDetection, handle_novelty_detection)
+    s = rospy.Service('/novelty_detection', NoveltyDetection, \
+                    n.handle_novelty_detection)
     print "Ready to detect novelty..."
     rospy.spin()
 

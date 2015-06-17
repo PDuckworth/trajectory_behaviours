@@ -25,8 +25,8 @@ from soma_geospatial_store.geospatial_store import *
 import novelTrajectories.config_utils as util
 import relational_learner.obtain_trajectories as ot
 import relational_learner.trajectory_analysis as th
+import relational_learner.graphs_handler as gh
 
-from relational_learner.graphs_handler import as gh
 from novelTrajectories.traj_data_reader import *
 from relational_learner.learningArea import *
 
@@ -159,7 +159,7 @@ def run_all(plotting=False, episode_store='relational_episodes'):
         #                    Learn a Clustering model                   #
         # **************************************************************#
         rospy.loginfo('Learning on Feature Space')
-        params, tag = AG_setup(input_data, date, str_roi)
+        params, tag = gh.AG_setup(input_data, date, str_roi)
 
         smartThing = Learning(f_space=feature_space, roi=str_roi, vis=False)
         pca, variable_scores = smartThing.pca_investigate_variables()

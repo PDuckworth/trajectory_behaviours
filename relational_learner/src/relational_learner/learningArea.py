@@ -271,6 +271,10 @@ class Learning():
         timestamps_vec = time_wrap(time_points)[0]    
         fitting = activity_time(timestamps_vec, interval=interval)
 
+        ## Debug the Online Temporal Plot:
+        print "Saving Timepoints as a test:" 
+        pickle.dump(timestamps_vec, open('/home/strands/TIME_TEST.p', "w"))
+
         self.methods["time_dyn_clst"] = dyn_cl
         self.methods["time_fitting"] = fitting
         if plot: self.temporal_plot(vis=False)
