@@ -7,7 +7,12 @@ from relational_learner.srv import *
 from relational_learner.msg import *
 import numpy as np
 import cv2
+import cv_bridge
 import matplotlib.pyplot as plt
+from sensor_msgs.msg import Image
+import os
+import cPickle as pickle
+import relational_learner.learningArea as la
 
 class NoveltyClient(object):
     
@@ -21,9 +26,17 @@ class NoveltyClient(object):
         self.cnt=0
         self.vis=vis
         self.published_uuids = []
-
+        self.pub_T = rospy.Publisher('/novalty/temporal_novalty', Image, latch=True, queue_size=1)
         self.pub = rospy.Publisher("/trajectory_behaviours/novel_trajectory", String, queue_size=10)
         rospy.Subscriber("/trajectory_behaviours/episodes", episodes_to_novelty, self.callback)
+        self.smartThing = {}
+        self.pc = {}
+        self.pf = {}
+        print '############################################################'
+        print '>>>>>PAUL<<<<<<, currently am reading only roi_2_smartThing.'
+        print '############################################################'
+        file_ = os.path.join('/home/lucie01/STRANDS/learning/roi_2_smartThing.p')
+        self.smartThing['2'] = smartThing=la.Learning(load_from_file=file_)
 
     def novelty_client(self, msg):
         rospy.wait_for_service('/novelty_detection')
@@ -56,17 +69,18 @@ class NoveltyClient(object):
                 self.call_temporal_graph()
 
 
-     def call_temporal_graph(self):
+    def call_temporal_graph(self):
         print "Region = ", self.roi
-        """
-        self.roi
         (start_time, pc, pf) = self.ret.temporal_nov
-        load pickle file
-            file_ = os.path.join('/home/strands/STRANDS/learning/roi_' + self.roi + '_smartThing.p')
-            smartThing=la.Learning(load_from_file=file_)
 
-        fitting = smartThing.methods['time_fitting']
-        dyn_cl = smartThing.methods['time_dyn_clst']
+        if self.roi not in self.pc:
+            self.pc[self.roi],self.pf[self.roi] = la.Learning.temporal_plot(self.smartThing[self.roi])
+        #print self.pc,pc
+        #print self.pf,pf
+        print start_time
+        print '----------------------------'
+        """
+
        
         check /src/relational_learning/learningArea.py and plot_temporal for details.
         """
@@ -77,6 +91,7 @@ class NoveltyScoreLogic(object):
         self.uuid = ""
         self.spatial_results = {}
         self.keep_ids = []
+        self.pub_S = rospy.Publisher('/novalty/spatial_novalty', Image, latch=True, queue_size=1)
 
     def cardcheck_msg(self, uuid, ret):
         """Tests whether UUID is novel or not"""
@@ -117,7 +132,7 @@ class NoveltyScoreLogic(object):
         else: self.spatial_results[uuid] = [0]*10
         self.spatial_results[uuid][9] = self.dst 
 
-        print "keeps", self.keep_ids
+        #print "keeps", self.keep_ids
         remove = []
         if rotate:
             for key in self.spatial_results:
@@ -126,12 +141,12 @@ class NoveltyScoreLogic(object):
 
             for i in remove:
                 del self.spatial_results[i]
-            print "remove", remove
+            #print "remove", remove
             self.call_spatial_graph() #Load the graph only if all people in the scene have been analysed
 
 
     def call_spatial_graph(self):
-        print "PLOTTING DICT: ", self.spatial_results.keys()
+        #print "PLOTTING DICT: ", self.spatial_results.keys()
        
         fig = plt.figure()
         fig.clf()
@@ -156,6 +171,9 @@ class NoveltyScoreLogic(object):
         ax.set_xlabel("time (in trajectory_publisher msgs)")
         #ax.set_yticklabels(regions)
         plt.savefig('/tmp/nov_gr.png', bbox_inches='tight', dpi=100)
+        img = cv2.imread('/tmp/nov_gr.png')
+        msg = cv_bridge.CvBridge().cv2_to_imgmsg(img, encoding="bgr8")
+        self.pub_S.publish(msg)
 
 
 
@@ -177,20 +195,15 @@ if __name__ == "__main__":
     img = np.zeros((10,10,3),dtype=np.uint8)
     cv2.imwrite('/tmp/act_gr.png',img)
     cv2.imwrite('/tmp/nov_gr.png',img)
+    
+    
+    pub_A = rospy.Publisher('/novalty/activity_graph', Image, latch=True, queue_size=1)
     while not rospy.is_shutdown():
         if vis_graph:
             try:
-                img = cv2.imread('/tmp/act_gr.png')
-                #cv2.imwrite('/tmp/test1/test1_'+str(frame)+'_.png',img)
-                img = cv2.resize(img, (0,0), fx=0.5, fy=0.5)
-                cv2.imshow('Activity_Graph',img)
-
-                img2 = cv2.imread('/tmp/nov_gr.png')
-                # cv2.imwrite('/tmp/test1/test2_'+str(frame)+'_.png',img)
-                img2 = cv2.resize(img2, (0,0), fx=1, fy=1)
-                cv2.imshow('Novelty_Scores',img2)
-                frame+=1
-                cv2.waitKey(1)
+                #img = cv2.imread('/tmp/act_gr.png')
+                msg = cv_bridge.CvBridge().cv2_to_imgmsg(img, encoding="bgr8")
+                pub_A.publish(msg)
             except Exception:
                 pass
 
