@@ -26,7 +26,7 @@ import novelTrajectories.config_utils as util
 import relational_learner.obtain_trajectories as ot
 import relational_learner.trajectory_analysis as th
 
-from relational_learner.graphs_handler import *
+from relational_learner.graphs_handler import as gh
 from novelTrajectories.traj_data_reader import *
 from relational_learner.learningArea import *
 
@@ -76,17 +76,16 @@ def run_all(plotting=False, episode_store='relational_episodes'):
 
     # *******************************************************************#
     #              Analyse the shape of the Trajectories                 #
+    #                       NOT NEEDED FOR DEMO                          #
     # *******************************************************************#
-    rospy.loginfo('Generating Heatmap of trajectories...')
-    dt = th.Discretise_Trajectories(data=uuid_pose_dict, bin_size=0.1, filter_vel=1)
-    dt.heatmap_run(vis=plotting, with_analysis=True)
+    #rospy.loginfo('Generating Heatmap of trajectories...')
+    #dt = th.Discretise_Trajectories(data=uuid_pose_dict, bin_size=0.1, filter_vel=1, verbose=False)
+    #dt.heatmap_run(vis=plotting, with_analysis=True)
 
-    rospy.loginfo('Self generating interesting destination points...')
-    interest_points = dt.plot_polygon(vis=plotting, facecolor='green', alpha=0.4)
-    print "interesting points include:\n", interest_points
-
-
-    dt.markov_chain.display_and_save(layout='nx', view=True, path=trajs)
+    #rospy.loginfo('Self generating interesting destination points...')
+    #interest_points = dt.plot_polygon(vis=plotting, facecolor='green', alpha=0.4)
+    #print "interesting points include:\n", interest_points
+    #dt.markov_chain.display_and_save(layout='nx', view=True, path=trajs)
 
 
     # *******************************************************************#
@@ -124,37 +123,37 @@ def run_all(plotting=False, episode_store='relational_episodes'):
         # **************************************************************#
         rospy.loginfo('Generating Activity Graphs')
 
-        params, tag = AG_setup(input_data, date, str_roi)
+        params, tag = gh.AG_setup(input_data, date, str_roi)
         print "INFO: ", params, tag, activity_graph_dir
 
-        generate_graph_data(all_episodes, activity_graph_dir, params, tag)
+        gh.generate_graph_data(all_episodes, activity_graph_dir, params, tag)
 
         # **************************************************************#
         #           Generate Feature Space from Histograms              #
         # **************************************************************#
         rospy.loginfo('Generating Feature Space')
-        feature_space = generate_feature_space(activity_graph_dir, tag)
+        feature_space = gh.generate_feature_space(activity_graph_dir, tag)
 
-        (code_book, graphlet_book, X_source_U) = feature_space
+        (code_book, graphlet_book, X_source_U, X_uuids) = feature_space
         print "code_book length = ", len(code_book)
 
         # **************************************************************#
         #                    Create a similarty space                   #
         # **************************************************************#
-        rospy.loginfo('Create Similarity Space')
-        similarity_space = get_similarity_space(feature_space)
-        dictionary_of_similarity = {}
+        # rospy.loginfo('Create Similarity Space')
+        # similarity_space = get_similarity_space(feature_space)
+        # dictionary_of_similarity = {}
 
-        for i in similarity_space:
-            key = np.sum(i)
-            if key in dictionary_of_similarity:
-                dictionary_of_similarity[key] += 1
-            else:
-                dictionary_of_similarity[key] = 1
+        # for i in similarity_space:
+        #     key = np.sum(i)
+        #     if key in dictionary_of_similarity:
+        #         dictionary_of_similarity[key] += 1
+        #     else:
+        #         dictionary_of_similarity[key] = 1
 
-                # print "similarty space matches =" #Note: Reducing +ve histogram counts to 1
-                # for key, cnt in dictionary_of_similarity.items():
-                # print key, cnt
+                ## print "similarty space matches =" #Note: Reducing +ve histogram counts to 1
+                ## for key, cnt in dictionary_of_similarity.items():
+                ## print key, cnt
 
         # **************************************************************#
         #                    Learn a Clustering model                   #
@@ -163,13 +162,13 @@ def run_all(plotting=False, episode_store='relational_episodes'):
         params, tag = AG_setup(input_data, date, str_roi)
 
         smartThing = Learning(f_space=feature_space, roi=str_roi, vis=False)
-
         pca, variable_scores = smartThing.pca_investigate_variables()
 
         top = 0.1  # Percentage of graphlets to analyse (make this automatic?)
         smartThing.pca_graphlets(pca, variable_scores, top)
 
-        smartThing.kmeans(k=2)  # Can pass k, or auto selects min(penalty)
+        rospy.loginfo('Good ol k-Means')
+        smartThing.kmeans(k)  # Can pass k, or auto selects min(penalty)
 
         # *******************************************************************#
         #                    Temporal Analysis                               #

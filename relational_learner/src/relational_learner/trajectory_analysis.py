@@ -95,8 +95,8 @@ class Discretise_Trajectories(object):
             data_ret["angles"].extend(angles)
             data_ret["velocities"].extend(velocities)
 
-            print "len of vel= ",  len(velocities)
-            print velocities
+            #if self.verbose: print "len of vel= ",  len(velocities)
+            #if self.verbose: print velocities
 
         self.markov_chain = mchain
         print "valid datapoints after filtering on velocity = %s " % (len(data_ret["angles"]))

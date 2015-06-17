@@ -99,7 +99,7 @@ def generate_feature_space(data_dir, tag, __out=False):
 
     print "len of code book: " + repr(len(code_book))
     if len(code_book) != len(graphlet_book): 
-        print "BOOK OF HASHES DOES NOT EQUAL BOOK OF ACTIVITY GRAPHS"
+        print "BOOK OF HASHES DOES NOT EQUAL BOOK OF ACTIVITY GRAPHS. \n EXITING."
         sys.exit(1)
 
     rospy.loginfo('Generating codebook FINISHED')
@@ -107,11 +107,13 @@ def generate_feature_space(data_dir, tag, __out=False):
     rospy.loginfo('Generating features')
     cnt = 0
     X_source_U = []
+    X_uuids = []
     #Histograms are Windowed dictionaries of histograms 
     for episodes_file in activity_graphs:
         if __out: print cnt, episodes_file
         histogram = activity_graphs[episodes_file].get_histogram(code_book)
         X_source_U.append(histogram)
+        X_uuids.append(episodes_file)
         cnt+=1
         if __out and cnt ==1:
             key = activity_graphs[episodes_file].graphlet_hash_cnts.keys()[0]
@@ -120,10 +122,11 @@ def generate_feature_space(data_dir, tag, __out=False):
             print "sum of hash counts: " + repr(sum(activity_graphs[episodes_file].graphlet_hash_cnts[key].values()))
             print "sum of histogram: " + repr(sum(histogram))
     
+    
     rospy.loginfo('Generating features FINISHED')
     rospy.loginfo('Saving all experiment data')       
-    
-    feature_space = (code_book, graphlet_book, X_source_U)
+    feature_space = (code_book, graphlet_book, X_source_U, X_uuids)
+    print "list of UUIDS?", feature_space[3]
 
     feature_space_out_file = os.path.join(data_dir + 'feature_space_' + tag + '.p')
     pickle.dump(feature_space, open(feature_space_out_file, 'w'))

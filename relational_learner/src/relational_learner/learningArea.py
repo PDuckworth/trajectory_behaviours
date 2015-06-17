@@ -57,7 +57,7 @@ class Learning():
         else:
 
             (self.code_book, self.graphlet_book, \
-                      self.feature_space) = f_space
+                self.feature_space, self.X_uuids) = f_space
             self.methods = {}
             self.roi = roi
             self.visualise = vis
@@ -161,7 +161,7 @@ class Learning():
 
     def kmeans(self, k=None):
         np.random.seed(42)
-        X = np.array(self.feature_space)        
+        X = np.array(self.feature_space)
         #scaler = StandardScaler()
         #scaler.fit(X)
         #X_s = scaler.transform(X)        
@@ -173,7 +173,7 @@ class Learning():
             #self.visualise = True
             min_k = 2
             #loop from k=2 until a third of the datapoints
-            for k in xrange(min_k, int(len(data)/3)+1):
+            for k in xrange(min_k, int(len(data)/5)+1):
                 (estimator, penalty) = self.kmeans_util(data, k) 
                 if k==min_k: 
                     (best_e, best_p, best_k) = estimator, penalty, k
@@ -182,8 +182,7 @@ class Learning():
             estimator, penalty, k = (best_e, best_p, best_k)
 
             print "k = %d has minimum inertia*penalty" %k
-        
-    
+
         estimator = self.kmeans_cluster_radius(data, estimator)
         
         self.methods["kmeans"] = estimator
