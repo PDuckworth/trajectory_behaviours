@@ -72,7 +72,7 @@ class novelty_class(object):
         self.fig1 = plt.figure()
         self.fig2 = plt.figure()
 
-    def publish_temp_image(self, pc, pf, time_of_day, roi):
+    def publish_temp_image(self, pc, pf, time_of_day, roi, threshold):
         self.fig1.clf()
         ax1 = self.fig1.add_subplot(111)
         plt.sca(ax1)
@@ -85,7 +85,7 @@ class novelty_class(object):
         plt.plot(plot_vec,pf_all,label='GMM fitting')
         plt.plot(time_of_day/3600.0, pc, label='dyn novelty', color='c', marker='o', markersize=15)
         plt.plot(time_of_day/3600.0, pf, label='gmm novelty', color='g', marker='o', markersize=15)
-
+        plt.plot(time_of_day/3600.0, threshold, '--', color='b', linewidth=0.5)
         plt.xlim([0,24])
         ax1.set_xticks(np.arange(0,24))
 
@@ -152,8 +152,8 @@ class novelty_class(object):
             if max(y)>y_max: y_max=max(y)
             if max(std)>y_max: y_max=max(std)
             plt.plot(x,y, '+-', linewidth=1.0, label=key)
-            plt.plot(x,mean, '--', linewidth=0.5, label='  mean')
-            plt.plot(x,std, '--', linewidth=0.5, label='  std')
+            #plt.plot(x,mean, '--', linewidth=0.5, label='  mean')
+            plt.plot(x,std, '--', linewidth=0.5, label='  mean+std')
         ax2.legend()
         plt.xlim(0, 10)
         plt.ylim(0, y_max*1.5)
@@ -283,7 +283,8 @@ class novelty_class(object):
         print "PC = ", pc
         print "PF = ", pf
 
-        if req.visualise_graphs: self.publish_temp_image(pc, pf, time_of_day, roi)
+        if req.visualise_graphs: self.publish_temp_image(pc, pf, time_of_day, \
+                    roi, req.temp_threshold)
 
         """9. ROI Knowledge"""
         try:

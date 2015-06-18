@@ -10,13 +10,13 @@ import matplotlib.pyplot as plt
 
 class NoveltyClient(object):
     
-    def __init__(self, threshold=0.05, vis=False):
+    def __init__(self, threshold=0.10, vis=False):
         self.msg = None
         self.ret = None
 
         self.uuid = ''
-        self.threshold=threshold
-        self.novlogic = NoveltyScoreLogic()
+        self.t_threshold = threshold
+        self.novlogic = NoveltyScoreLogic(threshold)
         self.cnt=0
         self.vis=vis
         self.published_uuids = []
@@ -27,7 +27,7 @@ class NoveltyClient(object):
     def novelty_client(self, msg):
         rospy.wait_for_service('/novelty_detection')
         proxy = rospy.ServiceProxy('/novelty_detection', NoveltyDetection)  
-        req = NoveltyDetectionRequest(msg, self.vis)
+        req = NoveltyDetectionRequest(msg, self.vis, self.t_threshold)
         ret = proxy(req)
         return ret
 
@@ -51,13 +51,12 @@ class NoveltyClient(object):
 
 
 class NoveltyScoreLogic(object):
-    def __init__(self):
+    def __init__(self, threshold):
         self.uuid = ""
+        self.threshold = threshold
 
     def cardcheck_msg(self, uuid, ret):
         """Tests whether UUID is novel or not"""
-
-        threshold = 0.05 #probability of sample belonging to temporal model
 
         if ret.temporal_nov != []:
             (temp1, temp2) = ret.temporal_nov
@@ -73,8 +72,8 @@ class NoveltyScoreLogic(object):
 
         #region knowledge must be > 1 minute
         if ret.roi_knowledge > 60: 
-            if temp1 < threshold: description = description + ">>> temporal novelty %s"  % temp1
-            if temp2 < threshold: description = description + ">>> temporal novelty %s" % temp2
+            if temp1 < self.threshold: description = description + ">>> temporal novelty %s"  % temp1
+            if temp2 < self.threshold: description = description + ">>> temporal novelty %s" % temp2
 
         return description
 
@@ -90,5 +89,5 @@ if __name__ == "__main__":
     print "Usage: Visualising Activity Graphs is not selected. Turn_on = 1. 0 by default."
     print "Graph viz = ", vis_graph
 
-    nc = NoveltyClient(threshold=0.05, vis=vis_graph)
+    nc = NoveltyClient(threshold=0.10, vis=vis_graph)
     rospy.spin()
