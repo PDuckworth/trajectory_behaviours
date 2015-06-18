@@ -126,7 +126,6 @@ def generate_feature_space(data_dir, tag, __out=False):
     rospy.loginfo('Generating features FINISHED')
     rospy.loginfo('Saving all experiment data')       
     feature_space = (code_book, graphlet_book, X_source_U, X_uuids)
-    print "list of UUIDS?", feature_space[3]
 
     feature_space_out_file = os.path.join(data_dir + 'feature_space_' + tag + '.p')
     pickle.dump(feature_space, open(feature_space_out_file, 'w'))

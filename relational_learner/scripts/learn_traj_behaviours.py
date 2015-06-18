@@ -133,14 +133,14 @@ def run_all(plotting=False, episode_store='relational_episodes'):
         # **************************************************************#
         rospy.loginfo('Generating Feature Space')
         feature_space = gh.generate_feature_space(activity_graph_dir, tag)
-
-        (code_book, graphlet_book, X_source_U, X_uuids) = feature_space
-        print "code_book length = ", len(code_book)
+        # (code_book, graphlet_book, X_source_U, X_uuids) = feature_space
+        # print "code_book length = ", len(feature_space[0])
 
         # **************************************************************#
         #                    Create a similarty space                   #
         # **************************************************************#
         # rospy.loginfo('Create Similarity Space')
+        
         # similarity_space = get_similarity_space(feature_space)
         # dictionary_of_similarity = {}
 
@@ -160,15 +160,15 @@ def run_all(plotting=False, episode_store='relational_episodes'):
         # **************************************************************#
         rospy.loginfo('Learning on Feature Space')
         params, tag = gh.AG_setup(input_data, date, str_roi)
-
         smartThing = Learning(f_space=feature_space, roi=str_roi, vis=False)
-        pca, variable_scores = smartThing.pca_investigate_variables()
 
+        ##PCA Analysis of Feature Space:
+        pca, variable_scores = smartThing.pca_investigate_variables()
         top = 0.1  # Percentage of graphlets to analyse (make this automatic?)
         smartThing.pca_graphlets(pca, variable_scores, top)
 
         rospy.loginfo('Good ol k-Means')
-        smartThing.kmeans(k)  # Can pass k, or auto selects min(penalty)
+        smartThing.kmeans()  # Can pass k, or auto selects min(penalty)
 
         # *******************************************************************#
         #                    Temporal Analysis                               #
