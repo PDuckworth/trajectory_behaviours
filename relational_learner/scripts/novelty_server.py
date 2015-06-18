@@ -85,7 +85,7 @@ class novelty_class(object):
         plt.plot(plot_vec,pf_all,label='GMM fitting')
         plt.plot(time_of_day/3600.0, pc, label='dyn novelty', color='c', marker='o', markersize=15)
         plt.plot(time_of_day/3600.0, pf, label='gmm novelty', color='g', marker='o', markersize=15)
-        plt.plot(time_of_day/3600.0, threshold, '--', color='b', linewidth=0.5)
+        plt.plot(plot_vec, [threshold]*len(plot_vec), '--', color='k', linewidth=0.5)
         plt.xlim([0,24])
         ax1.set_xticks(np.arange(0,24))
 
