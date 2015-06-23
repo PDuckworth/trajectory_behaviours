@@ -67,26 +67,42 @@ def run_all(plotting=False, episode_store='relational_episodes'):
     roi_knowledge, roi_temp_list = region_knowledge(soma_map, soma_config, \
                                                     sampling_rate=10, plot=plotting)
 
-    # Filter trajectories which were deemed noise by using only people_trajectory msg store
-    # list_of_uuids, pose_data_dic = ot.filtered_trajectorys()
-    uuid_pose_dict = ot.filtered_trajectorys()
-    list_of_uuids = uuid_pose_dict.keys()
-    print "# uuids quried in people_trajectory msg store = ", len(list_of_uuids)
-    # pickle.dump(uuid_pose_dict, open(data_dir+"trajectory_dump/pose_data_dic_leeds.p",'wt'))
+    # *******************************************************************#
+    #               Filter trajectories which were deemed                #
+    #          noise by using only people_trajectory msg store           #
+    #           and filter on their distance covered per pose            #
+    # *******************************************************************#
+    store='people_trajectory'
+    already_queried_data = True
+    if already_queried_data: (all_data, ratios) = pickle.load(open(trajs+"tuple_of_all_traj_info.p", "r"))
+    else: all_data, ratios = ot.filtered_trajectorys(just_ids=False, traj_store=store)
+
+    best_uuids = ot.get_long_tracks(ratios, request_percent=0.05, vis=False)
+    query = ot.make_query(best_uuids) 
+    q = ot.query_trajectories(query)
+    q. ot.get_poses()
+    raw_input("selected trajectories")
+    uuid_pose_dict = { your_key: all_data[your_key] for your_key in best_uuids}
 
     # *******************************************************************#
     #              Analyse the shape of the Trajectories                 #
-    #                       NOT NEEDED FOR DEMO                          #
+    #                                                                    #
     # *******************************************************************#
-    #rospy.loginfo('Generating Heatmap of trajectories...')
-    #dt = th.Discretise_Trajectories(data=uuid_pose_dict, bin_size=0.1, filter_vel=1, verbose=False)
-    #dt.heatmap_run(vis=plotting, with_analysis=True)
+    rospy.loginfo('Generating Heatmap of trajectories...')
+    print len(uuid_pose_dict.keys())
+    cnt =0
+    for uuid in uuid_pose_dict:
+        for i in uuid_pose_dict[uuid]["x"]:
+            cnt+=1
+    print "cnt = ", cnt
 
-    #rospy.loginfo('Self generating interesting destination points...')
-    #interest_points = dt.plot_polygon(vis=plotting, facecolor='green', alpha=0.4)
-    #print "interesting points include:\n", interest_points
+    dt = th.Discretise_Trajectories(data=uuid_pose_dict, bin_size=0.2, filter_vel=1, verbose=False)
+    dt.heatmap_run(vis=plotting, with_analysis=True)
+
+    rospy.loginfo('Self generating interesting destination points...')
+    interest_points = dt.plot_polygon(vis=plotting, facecolor='green', alpha=0.4)
+    print "interesting points include:\n", interest_points
     #dt.markov_chain.display_and_save(layout='nx', view=True, path=trajs)
-
 
     # *******************************************************************#
     #                  Obtain Episodes in ROI                            #
@@ -104,14 +120,13 @@ def run_all(plotting=False, episode_store='relational_episodes'):
         trajectory_times = []
         for cnt, trajectory in enumerate(res):
             # print cnt
-            if trajectory["uuid"] not in list_of_uuids:
-                # print "UUID: %s filtered out" % str(trajectory["uuid"])
-                continue
+            if trajectory["uuid"] not in best_uuids: continue
+                
             all_episodes[trajectory["uuid"]] = Mongodb_to_list(trajectory["episodes"])
             trajectory_times.append(trajectory["start_time"])
 
         cnt += 1  # enumerate starts cnt from 0
-        print "Total Number of Trajectories = %s." % cnt
+        print "Total Number of Episodes queried = %s." % cnt
         print "Number of Trajectories after filtering = %s." % len(all_episodes)
 
         if len(all_episodes) < 12:
@@ -170,12 +185,17 @@ def run_all(plotting=False, episode_store='relational_episodes'):
         rospy.loginfo('Good ol k-Means')
         smartThing.kmeans()  # Can pass k, or auto selects min(penalty)
 
+        #Trajectory Query Service Needs to be running:
+        kmeans_analysis(smartThing.methods["kmeans_cluster_composition"])
+        
+
         # *******************************************************************#
         #                    Temporal Analysis                               #
         # *******************************************************************#
         rospy.loginfo('Learning Temporal Measures')
         # print "traj times = ", trajectory_times, "\n"
         smartThing.time_analysis(trajectory_times, plot=plotting)
+        #smartThing.methods["temporal_list_of_uuids"] = trajectory_times
 
         # Add the region knowledge to smartThing
         try:

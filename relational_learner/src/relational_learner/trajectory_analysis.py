@@ -44,11 +44,11 @@ class Discretise_Trajectories(object):
         slices = np.linspace(22.5, 382.5, 9, True).astype(np.float) - 180
         slices.sort()
 
-        #Rename the binned angles as per a clock face:
+        #Rename the binned angles as per a clock face 0 = 12oclock; 4 = 6oclock;
         binned_angles = {6:0, 5:1, 4:2, 3:3, 2:4, 1:5, 0:6, 8:6, 7:7}
 
         mchain = mc.Markov_Chain('trajectories')
-        print "number of subject ids: ", data.keys()
+        print "number of subject ids: ", len(data.keys())
         for uuid, data in data.items():
             xs, ys, angles, velocities = [], [], [], []   #valid x and y's with positive velocity
 
@@ -99,7 +99,7 @@ class Discretise_Trajectories(object):
             #if self.verbose: print velocities
 
         self.markov_chain = mchain
-        print "valid datapoints after filtering on velocity = %s " % (len(data_ret["angles"]))
+        print "valid datapoints after filtering on velocity = %s " % (len(data_ret["x"]))
         return data_ret
 
     def heatmap_run(self, vis=False, with_analysis=False):
@@ -143,7 +143,7 @@ class Discretise_Trajectories(object):
             #print "yedges = ", self.yedges
 
 
-    def filter_outliers(self, mean_or_median="mean", std_factor=1, set_value=0.0, with_analysis=False):
+    def filter_outliers(self, mean_or_median="mean", std_factor=2, set_value=0.0, with_analysis=False):
         # heatmap, xedges, yedges = self.compute_heatmap(xs=self.data["x"], ys=self.data["y"])
 
         hflat = self.heatmap.flatten()
@@ -198,13 +198,12 @@ class Discretise_Trajectories(object):
 
         if xedges is not None and yedges is not None:
             extent = [xedges[0], xedges[-1], yedges[0], yedges[-1]]
-
-            #plt.imshow(heatmap.T, extent=extent,  \
-            #            interpolation='nearest', cmap='hot')
+           
             X,Y = np.meshgrid(xedges, yedges)
-            plt.pcolor(X, Y, heatmap.T, cmap='hot')
+            plt.pcolor(X, Y, heatmap.T)#, cmap='hot')
         else:
             plt.imshow(heatmap.T, origin='lower', cmap=plt.cm.gray)
+
         plt.colorbar()
         plt.grid(True)
         plt.show()
@@ -261,7 +260,7 @@ if __name__ == '__main__':
     argp.add_argument("-v", "--view", action="store_true", help="view the heatmap")
     args = argp.parse_args()
 
-    dt = Discretise_Trajectories(bin_size=0.1, delta = 1, pickle_file=args.load, verbose=False)
+    dt = Discretise_Trajectories(bin_size=0.2, pickle_file=args.load, filter_vel=1,verbose=False)
     dt.heatmap_run(vis=args.view, with_analysis=True)
 
     p='/home/strands/STRANDS/trajectory_dump'
