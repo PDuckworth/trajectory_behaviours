@@ -127,7 +127,7 @@ class Learning():
             for i, var in enumerate(component):
                 variable_scores[i] += abs(var*pca.explained_variance_ratio_[cnt])
 
-        print ">> Weighting of each variable: \n", variable_scores, "\n"
+        #print ">> Weighting of each variable: \n", variable_scores, "\n"
 
         self.vis=False
         if self.vis:
@@ -194,12 +194,16 @@ class Learning():
         n_samples, n_features = data.shape
         print "sum of inertias = ", estimator.inertia_
         #print "CLUSTER CENTERS = ", estimator.cluster_centers_
-        print "sample labels = ", estimator.labels_
-    
+        print "datapoint labels = ", estimator.labels_
+
+        cluster_composition={}
         cluster_radius = {}
         for i, sample in enumerate(data):
-            #print "Sample = ", i
+            
             label = estimator.labels_[i]
+            uuid = self.X_uuids[i]
+            if label not in cluster_composition: cluster_composition[label] = []
+
             clst = estimator.cluster_centers_[label]
             dst = distance.euclidean(sample,clst)
 
@@ -207,6 +211,14 @@ class Learning():
                 cluster_radius[label] = [dst]
             else:
                 cluster_radius[label].append(dst)
+
+            cluster_composition[label].append(uuid)
+            print "Datapoint = %s, UUID = %s belongs to %s cluster" %(i, uuid, label)
+
+        # Analyse the trajectories which belong to each learnt cluster
+        for key, value in cluster_composition.items():
+            print key, value
+        self.methods["kmeans_cluster_composition"] = cluster_composition
 
         means, std = {}, {}
         for label in cluster_radius:
@@ -521,12 +533,29 @@ def plot_pca(data, k):
 
 if __name__ == "__main__":
     rospy.init_node('learningArea')
-
     data_dir = '/home/strands/STRANDS/'
-    file_ = os.path.join(data_dir + 'learning/roi_12_smartThing.p')
+
+    #file_ = os.path.join(data_dir + 'AG_graphs/feature_space_roi_2_None_1_3_4__13_04_2015.p')
+    file_ = os.path.join(data_dir + 'AG_graphs/feature_space_roi_1_None_1_3_4__13_04_2015.p')
+    print file_
+    l = pickle.load(open(file_, "r"))
+    (code_book, graphlet_book, X_source_U, X_uuids) = l
+    print "# datapoints = ", len(X_uuids)#, X_uuids
+
+    smartThing=Learning(f_space=l)
+    smartThing.kmeans()
+
+    print "Learnt models for: "
+    for key in smartThing.methods:
+        print "    ", key
+
+    smartThing.save(data_dir + 'learning')
+    
+    file_ = os.path.join(data_dir + 'learning/_smartThing.p')
     print file_
 
     smartThing=Learning(load_from_file=file_)
-    print smartThing.methods
-    print smartThing.code_book
+    #print smartThing.methods
+    for key,value in smartThing.methods["kmeans_cluster_composition"].items():
+        print key, value, "\n"
 
