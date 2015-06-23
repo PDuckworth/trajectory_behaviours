@@ -9,6 +9,7 @@ __copyright__   = "Copyright 2015, University of Leeds"
 
 import sys
 import rospy
+import cPickle as pickle
 from std_msgs.msg import String
 from relational_learner.srv import *
 from relational_learner.msg import *
@@ -43,19 +44,20 @@ if __name__ == "__main__":
     print "qsr_viz = ", vis
 
     ec = EpisodeClient(vis)
-    #query ='''{"uuid": {"$exists" : "True"}}'''
-    #query ='''{"uuid": {"$exists" : "True"}}'''
-    #query ='''{"uuid": "b74c11b7-e196-5e93-a1c0-a9fb6b93866f"}''' # 17000 poses
-    #query ='''{"uuid": "3d99e112-2c92-52e7-81bf-61c3064cbb0d"}''' # 4700 poses
-    query ='''{"uuid": "ff75912c-ae5a-5658-8689-d1cf8f722cde"}''' #8 episodes
-    q = ot.query_trajectories(query)
+    query ='''{"uuid": {"$exists" : "True"}}'''
 
+    data_dir = '/home/strands/STRANDS/'
+    list_of_uuids = pickle.load(open(data_dir + 'trajectory_dump/best_uuids_filtered_by_displacement.p', "r"))
+    print list_of_uuids
+    query = ot.make_query(list_of_uuids)
+    q = ot.query_trajectories(query)
+    q.get_poses()
 
     ec.current_uuids_detected = []
     for trajectory in q.res.trajectories.trajectories:
         ec.current_uuids_detected.append(trajectory.uuid)
     print "\nids = %s" % ec.current_uuids_detected
-
+    
     for cnt, trajectory in enumerate(q.res.trajectories.trajectories):
         print "\n passing ", cnt, trajectory.uuid
         ret = ec.episode_client(trajectory)

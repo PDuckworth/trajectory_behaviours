@@ -28,6 +28,7 @@ from relational_learner.Activity_Graph import Activity_Graph
 from time_analysis.cyclic_processes import *
 
 from relational_learner.msg import *
+from human_trajectory.msg import Trajectories
 from mongodb_store.message_store import MessageStoreProxy
 
 class RegionKnowledgeImporter(object):
@@ -68,7 +69,7 @@ class Learning():
     def save(self, dir):
         print("Saving...")
         print self.roi
-        filename = os.path.join(dir, self.roi + '_smartThing.p')
+        filename = os.path.join(dir, self.roi + '_smartThing_filtered.p')
 
         foo = { "ROI": self.roi, "feature_space": self.feature_space, \
                 "code_book": self.code_book, "graphlet_book": self.graphlet_book, \
@@ -213,11 +214,11 @@ class Learning():
                 cluster_radius[label].append(dst)
 
             cluster_composition[label].append(uuid)
-            print "Datapoint = %s, UUID = %s belongs to %s cluster" %(i, uuid, label)
+            #print "Datapoint = %s, UUID = %s belongs to %s cluster" %(i, uuid, label)
 
         # Analyse the trajectories which belong to each learnt cluster
         for key, value in cluster_composition.items():
-            print key, value
+            print "Cluster %s has %s datapoints." % (key, len(value))
         self.methods["kmeans_cluster_composition"] = cluster_composition
 
         means, std = {}, {}
@@ -289,10 +290,10 @@ class Learning():
 
         self.methods["time_dyn_clst"] = dyn_cl
         self.methods["time_fitting"] = fitting
-        if plot: self.temporal_plot(vis=False)
+        if plot: self.temporal_plot(data=timestamps_vec, vis=False)
         rospy.loginfo('Done\n')
 
-    def temporal_plot(self, plot_interval=900.0, period=86400, \
+    def temporal_plot(self, data=[], plot_interval=900.0, period=86400, \
                         vis=False):
         pc = []
         pf = []
@@ -309,10 +310,9 @@ class Learning():
         plt.bar(plot_vec,pc,width, color='r', edgecolor='r',\
               label='dynamic clustering')
         plt.plot(plot_vec,pf,label='GMM fitting')
-
         plt.xlim([0,24])
         t_ax.set_xticks(np.arange(0,24))
-
+    
         plt.xlabel('time of day')
         plt.ylabel('probability')
         plt.legend()
@@ -418,14 +418,6 @@ def region_knowledge(map, config, interval=3600.0, period = 86400.0,\
     return roi_knowledge, roi_temp_list
 
 
-
-
-
-
-
-
-
-
 def knowledge_plot(roi_temp_list, n_bins):
     fig = plt.figure()
     ax = fig.add_subplot(111, projection='3d')
@@ -529,33 +521,74 @@ def plot_pca(data, k):
     plt.yticks(())  
     plt.show()
 
+def test_plot(data=[], plot_interval=900.0, period=86400):
+    fig = plt.figure()
+    ax = fig.add_subplot(111)
+    width=0.01
+
+    timestamps_vec = time_wrap(data)[0] 
+    plt.hist(timestamps_vec)
+    plt.xlim([0,86400])
+    
+    plt.xlabel('time of day')
+    plt.ylabel('count')
+    plt.legend()
+    plt.show()
+
+def kmeans_analysis(data, vis=True):
+    if type(data) != dict: return()
+
+    for key, value in data.items():
+        #print key, value
+        
+        list_of_uuids_to_vis=[]
+        for uuid in value:
+            list_of_uuids_to_vis.append("%s" % str(uuid))
+        print "\ncluster %s, has %s trajectories" % (key, len(list_of_uuids_to_vis))
+
+        import relational_learner.obtain_trajectories as ot
+        query = ot.make_query(list_of_uuids_to_vis) 
+        #print query
+        q = ot.query_trajectories(query)
+        raw_input("press enter for next cluster")
 
 
 if __name__ == "__main__":
     rospy.init_node('learningArea')
     data_dir = '/home/strands/STRANDS/'
 
-    #file_ = os.path.join(data_dir + 'AG_graphs/feature_space_roi_2_None_1_3_4__13_04_2015.p')
-    file_ = os.path.join(data_dir + 'AG_graphs/feature_space_roi_1_None_1_3_4__13_04_2015.p')
+    ##file_ = os.path.join(data_dir + 'AG_graphs/feature_space_roi_2_None_1_3_4__13_04_2015.p')
+    #file_ = os.path.join(data_dir + 'AG_graphs/feature_space_roi_1_None_1_3_4__13_04_2015.p')
+    #print file_
+    #l = pickle.load(open(file_, "r"))
+    #(code_book, graphlet_book, X_source_U, X_uuids) = l
+    #print "# datapoints = ", len(X_uuids)#, X_uuids
+
+    #smartThing=Learning(f_space=l)
+    #smartThing.kmeans()
+    #print "Learnt models for: "
+    #for key in smartThing.methods:
+    #    print "    ", key
+    #smartThing.save(data_dir + 'learning')
+
+
+    ##Check trajectory clusters
+    file_ = os.path.join(data_dir + 'learning/roi_2_smartThing_filtered.p')
     print file_
-    l = pickle.load(open(file_, "r"))
-    (code_book, graphlet_book, X_source_U, X_uuids) = l
-    print "# datapoints = ", len(X_uuids)#, X_uuids
-
-    smartThing=Learning(f_space=l)
-    smartThing.kmeans()
-
-    print "Learnt models for: "
-    for key in smartThing.methods:
-        print "    ", key
-
-    smartThing.save(data_dir + 'learning')
-    
-    file_ = os.path.join(data_dir + 'learning/_smartThing.p')
-    print file_
-
     smartThing=Learning(load_from_file=file_)
-    #print smartThing.methods
-    for key,value in smartThing.methods["kmeans_cluster_composition"].items():
-        print key, value, "\n"
+    print smartThing.methods["kmeans_cluster_composition"].keys()
+    kmeans_analysis(smartThing.methods["kmeans_cluster_composition"], vis=True)
+
+
+
+    ##Check the temporal models
+    #file_ = os.path.join(data_dir + 'learning/roi_2_smartThing.p')
+    #print file_
+    #smartThing=Learning(load_from_file=file_)
+    
+    #time_vec = smartThing.methods['temporal_list_of_uuids']
+    #print len(time_vec)
+
+    #test_plot(time_vec)
+
 
