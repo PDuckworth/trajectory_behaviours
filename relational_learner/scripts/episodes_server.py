@@ -66,7 +66,7 @@ class Importer(object):
         self._client = pymongo.MongoClient(rospy.get_param("mongodb_host"),
                                            rospy.get_param("mongodb_port"))
 
-        self._store_client = MessageStoreProxy(collection="relational_episodes")
+        self._store_client = MessageStoreProxy(collection="relational_episodes_static_end2")
 
 
 def get_episode_msg(all_episodes):
@@ -140,7 +140,7 @@ def handle_episodes(req):
         return EpisodeServiceResponse(uuid=uuid)
     
     """2.5 Get the closest objects to the trajectory"""
-    closest_objs_to_trajs = ot.trajectory_object_dist(objects, trajectory_poses)
+    closest_objs_to_trajs = ot.trajectory_object_dist(objects, trajectory_poses, select=5)
     ti4=time.time()
 
     """3. QSRLib data parser"""#
@@ -190,7 +190,9 @@ def handle_episodes(req):
 
     #MongoDB Query - to see whether to insert new document, or update an existing doc.
     query = {"uuid" : str(uuid)} 
-    p_id = Importer()._store_client.update(message=msg, message_query=query, meta=meta, upsert=True)
+    i = Importer()
+    i._store_client = MessageStoreProxy(collection=req.message_store_name)
+    p_id = i._store_client.update(message=msg, message_query=query, meta=meta, upsert=True)
     tm1 = time.time()
 
     print "\nService took: ", time.time()-t0, "  secs."
@@ -200,7 +202,7 @@ def handle_episodes(req):
     print "  Initialising object distances: ", ti4-ti3, "  secs."
     print "  Data Reader took: ", tq1-tq0, "  secs."
     print "  Episodes took: ", te1-te0, "  secs."
-    print "  Mongo upload took: ", tm1-tm0, "  secs."
+    print "  Mongo upload to %s took: %s secs." % ( req.message_store_name, (tm1-tm0))
 
     return EpisodeServiceResponse(msg.header, msg.uuid, msg.soma_roi_id, msg.soma_map, \
                                   msg.soma_config, msg.start_time, msg.episodes)

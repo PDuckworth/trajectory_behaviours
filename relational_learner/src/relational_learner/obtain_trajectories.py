@@ -8,7 +8,7 @@ __copyright__   = "Copyright 2015, University of Leeds"
 
 import rospy
 import pymongo
-import os, sys, time, copy
+import os, sys, datetime, time, copy
 import logging
 import itertools
 import numpy as np
@@ -21,7 +21,10 @@ import relational_learner.learningArea as lA
 from interactive_markers.interactive_marker_server import *
 from visualization_msgs.msg import *
 
+from std_msgs.msg import String
 from geometry_msgs.msg import Point,Pose
+from relational_learner.srv import *
+from relational_learner.msg import *
 from human_trajectory.msg import Trajectory,Trajectories
 from soma_trajectory.srv import TrajectoryQuery, TrajectoryQueryRequest, TrajectoryQueryResponse
 from soma_geospatial_store.geospatial_store import GeoSpatialStoreProxy
@@ -29,7 +32,6 @@ from soma_geospatial_store.geospatial_store import GeoSpatialStoreProxy
 #**************************************************************#
 #             Obtain Objects and Trajectories                  #
 #**************************************************************#
-
 class query_objects():
 
     def __init__(self):
@@ -64,16 +66,17 @@ class query_objects():
         print repr(len(self.all_objects)) + ' objects Loaded.\n'
 
 
-def filtered_trajectorys(just_ids=True, already_filtered_list=[], msg_store='people_trajectory'):
+def filtered_trajectorys(just_ids=True, msg_store='people_trajectory', timedelta=None):
 
     """Find the completed (and filtered) trajectories from people_trajectory store"""
     store = GeoSpatialStoreProxy('message_store', msg_store)
     print "querying: ", msg_store
 
-    query = {"uuid": {"$exists": "True"}}
+    if timedelta != None: query = {"_meta.inserted_at" : {"$lt": timedelta}}
+    else: query = {"uuid": {"$exists": "True"}}
+
     rospy.loginfo("Query: %s" % query )
     res = store.find_projection(query, {"uuid":1, "trajectory":1})
-
     rospy.loginfo("Result: %s filtered trajectories" % res.count() ) 
 
     if just_ids:
@@ -88,8 +91,6 @@ def filtered_trajectorys(just_ids=True, already_filtered_list=[], msg_store='peo
     ratios = {}
     uuid_pose_dict = {}
     for full_trajectory in res:
-        if len(already_filtered_list) != 0:
-            if full_trajectory["uuid"] not in already_filtered_list: continue
 
         uuid = full_trajectory["uuid"]
         x, y, quarts = [], [], []
@@ -111,11 +112,10 @@ def filtered_trajectorys(just_ids=True, already_filtered_list=[], msg_store='peo
     return uuid_pose_dict, ratios
 
 
-def trajectory_object_dist(objects, trajectory_poses):
+def trajectory_object_dist(objects, trajectory_poses, select=4):
     uuids=trajectory_poses.keys()
     object_ids=objects.keys()
-
-    print repr(len(uuids)) + " trajectories.  "+ repr(len(object_ids)) + " objects. Selecting closest 4..."
+    print "%s trajectories.  %s objects. Selecting closest %s..." % (len(uuids), len(object_ids), select)
 
     object_distances={}
     distance_objects={}
@@ -145,8 +145,8 @@ def trajectory_object_dist(objects, trajectory_poses):
         keys = dist_objs.keys()
         keys.sort()
 
-        #select closest 4 objects or landmarks
-        closest_dists = keys[0:4]
+        #select closest 4 (%select) objects or landmarks
+        closest_dists = keys [0:select]
         closest_objects[uuid]=[]
     
         for dist in closest_dists:
@@ -176,12 +176,20 @@ class query_trajectories():
     def __init__(self, query):
         client = QueryClient()
         self.res = client.query(query, True)
-        #self.get_poses()
+        self.filtered_trajs = []
+        self.uuids_list = []
 
         if self.res.error:
             rospy.logerr("Result: error: %s (Invalid query: %s)" % (self.res.error, query))
         else:      
             print "Query returned: %s trajectories. " % repr(len(self.res.trajectories.trajectories))
+
+    def get_trajectories(self, filter_on_uuid = []):
+        print "filtering uuids"
+        for trajectory in self.res.trajectories.trajectories:
+            if trajectory.uuid in filter_on_uuid:
+                self.filtered_trajs.append(trajectory)
+                self.uuids_list.append(trajectory.uuid)
 
     def get_poses(self):
         self.trajs = {}
@@ -196,8 +204,6 @@ class query_trajectories():
                 z=entry.pose.position.z
                 self.trajs[trajectory.uuid].append((x,y,z))
 
-        print len(self.trajs)
-
 def convert_keys_to_string(dictionary):
     """Recursively converts dictionary keys to strings."""
     if isinstance(dictionary, unicode):
@@ -207,6 +213,23 @@ def convert_keys_to_string(dictionary):
     return dict((str(k), convert_keys_to_string(v)) 
         for k, v in dictionary.items())
    
+
+class EpisodeClient(object):
+
+    def __init__(self, msg_store = "relational_episodes"):
+        self.ret = None
+        self.current_uuids_detected = []
+        self.msg_store = msg_store
+
+    def episode_client(self, Trajectory):
+        rospy.wait_for_service('/episode_service')
+        proxy = rospy.ServiceProxy('/episode_service', EpisodeService)  
+        req = EpisodeServiceRequest(Trajectory, False, self.current_uuids_detected, \
+                                    self.msg_store)
+        ret = proxy(req)
+        return ret
+
+
 
 def make_query(uuids):
     """make a people_trajectory 'trajectory_query_service' query from a list of uuids"""
@@ -221,30 +244,20 @@ def make_query(uuids):
     return query
 
 
-def get_long_tracks(ratios, request_percent=0.05, vis=False):
+def get_uuids_from_traj_store(request_percent = 0.1, traj_store='people_trajectory', \
+            data_dir= '/home/strands/STRANDS/', vis=False, end_date=None):
+    s = time.time()
+
+    dict_of_poses, ratios = filtered_trajectorys(just_ids=False, msg_store=traj_store, timedelta=end_date)
+    both = (dict_of_poses, ratios)
+    #both = pickle.load(open(data_dir+"trajectory_dump/tuple_of_all_traj_info.p", "r"))
+    pickle.dump(both, open(data_dir+"trajectory_dump/tuple_of_all_traj_info.p", "w"))
+    print "number of trajectories dumped = %s" % len(ratios)
+
     a = list(reversed(sorted(ratios, key=ratios.get)))
     request = int(len(a) * request_percent)
     best_uuids = a[:request]
     print "best %s selected (sorted by highest ratio)" % request
-    pickle.dump(best_uuids, open(data_dir+"trajectory_dump/best_uuids_filtered_by_displacement.p", "w"))
-    if vis:
-        query = make_query(best_uuids) 
-        q = query_trajectories(query)
-    return best_uuids
-
-
-def get_uuids_from_traj_store(request = 0.1, traj_store='people_trajectory', \
-            data_dir= '/home/strands/STRANDS/', vis=False):
-    s = time.time()
-
-    dict_of_poses, ratios = filtered_trajectorys(just_ids=False, msg_store=traj_store)
-    both = (dict_of_poses, ratios)
-    #both = pickle.load(open(data_dir+"trajectory_dump/tuple_of_all_traj_info.p", "r"))
-    pickle.dump(both, open(data_dir+"trajectory_dump/tuple_of_all_traj_info.p", "w")) #Don't query again :)
-    print "number of trajectories dumped = %s" % len(ratios)
-
-    best_uuids = get_long_tracks(ratios, request_percent=request, vis=vis)
-    #print "best IDS = ", best_uuids
     print "time = ", time.time() - s
 
     return best_uuids
@@ -254,23 +267,30 @@ if __name__ == "__main__":
     global __out
     __out = True
     rospy.init_node("trajectory_obtainer")
+
+    data_dir= '/home/strands/STRANDS/'
+    soma_map = 'cs_lab_final'
+    soma_config = 'static_endpoints'
     
     ## Filter All Trajectories in message store
-    request = 0.05
+    request = 0.10
     traj_store = 'people_trajectory'
-    data_dir= '/home/strands/STRANDS/'
-    best_uuids_all_roi = get_uuids_from_traj_store(request, traj_store, data_dir, True)
-    print len(best_uuids_all_roi)
+    episode_store = 'relational_episodes_static_qtc'
+    ec = EpisodeClient(msg_store = episode_store)
+
+    deploy_start = datetime.datetime(2015, 05, 05)
+    end1 = datetime.datetime(2015, 06, 14)
+    end2 = datetime.datetime(2015, 06, 16)
+    deploy_start = datetime.datetime(2015, 06, 18)
+
+    best_uuids_all_roi = get_uuids_from_traj_store(request_percent=request, vis=True)
 
     rospy.loginfo("Running trajectoy/ROI query ")
-
     gs = GeoSpatialStoreProxy('geospatial_store','soma')
-    soma_map = 'g4s'
-    soma_config = 'g4s_novelty'
     cnt=0
-    
+   
     for roi in gs.roi_ids(soma_map, soma_config):
-        if roi != '1': continue
+        #if soma_config=='test_config' & roi != '2': continue
         cnt+=1
         print 'ROI: ', gs.type_of_roi(roi, soma_map, soma_config), roi
         geom = gs.geom_of_roi(roi, soma_map, soma_config)
@@ -286,30 +306,33 @@ if __name__ == "__main__":
             print key, objects_in_roi[key]
 
         #geom_str = convert_keys_to_string(geom)
-        query = '''{"loc": { "$geoWithin": { "$geometry": 
+        #query = '''{"loc": { "$geoWithin": { "$geometry":
+        query = '''{"loc": { "$geoIntersects": { "$geometry": 
         { "type" : "Polygon", "coordinates" : %s }}}}''' %geom['coordinates']
 
         q = query_trajectories(query)
-        q.get_poses()
+        q.get_trajectories(filter_on_uuid = best_uuids_all_roi)
 
-        if len(q.trajs)==0:
+        if len(q.uuids_list)==0:
             print "No Trajectories in this Region"            
             continue
         else:
-            uuid_pose_dict = {}
-            for uuid in best_uuids_all_roi:
-                if uuid in q.trajs: uuid_pose_dict[uuid] = q.trajs[uuid]
+            ec.current_uuids_detected = q.uuids_list
+            for cnt, trajectory in enumerate(q.filtered_trajs):
+                print cnt, trajectory.uuid 
 
-            traj_file = os.path.join(data_dir + '/trajectory_dump/filtered_on_disp_roi_%s.p') % roi
-            pickle.dump(uuid_pose_dict, open(traj_file, 'w'))
+                ret = ec.episode_client(trajectory)
 
-            print "number of unique traj returned = " + repr(len(q.trajs))
-            print "%s percent filtered on displacement %s" % (request*100, len(uuid_pose_dict))
-        raw_input("Press enter to continue")
 
-        #Create Landmark pins at randomly selected poses from all the trajectory data
-        all_poses = list(itertools.chain.from_iterable(q.trajs.values()))
-        print "number of poses in total = " +repr(len(all_poses))
+            traj_file = os.path.join(data_dir + 'trajectory_dump/using_obj_ids_roi_%s_end2.p') % roi
+            pickle.dump(q.uuids_list, open(traj_file, 'w'))
+            print "saved trajectory dict. here: %s" % traj_file
+            print "number of unique traj returned = " + repr(len(q.uuids_list))
+            print "%s percent filtered on displacement = %s trajectories" % (request*100, len(q.uuids_list))
+
+        ##Create Landmark pins at randomly selected poses from all the trajectory data
+        #all_poses = list(itertools.chain.from_iterable(q.trajs.values()))
+        #print "number of poses in total = " +repr(len(all_poses))
 
         ##To Dump trajectories for testing
         #data_dir='/home/strands/STRANDS'

@@ -27,7 +27,8 @@ class EpisodeClient(object):
     def episode_client(self, Trajectory):
         rospy.wait_for_service('/episode_service')
         proxy = rospy.ServiceProxy('/episode_service', EpisodeService)  
-        req = EpisodeServiceRequest(Trajectory, self.vis, self.current_uuids_detected)
+        req = EpisodeServiceRequest(Trajectory, self.vis, self.current_uuids_detected, \
+                                    "relational_episodes")
         ret = proxy(req)
         return ret
 

@@ -134,6 +134,7 @@ class Activity_Graph():
         
         for o_node in self.object_nodes:
             #Activity Graph code:
+
             #Set the name of the object node equal to the type. 
             o_node['name']=o_node['obj_type']
             
@@ -287,17 +288,27 @@ class Activity_Graph():
         
         for (o1, o1t, o2, o2t, rel, intv_start, intv_end) in episodes:
 
+            #Test to see if setting the Object Type equal to Object Name works
+
             # Add objects to the graph
             if o1 not in objects:
                 graph.add_vertex(o1)
                 objects[o1] = vertex_count
-                graph.vs()[vertex_count]['obj_type'] = o1t
+                if o1t == 'trajectory': 
+                    graph.vs()[vertex_count]['obj_type'] = 'trajectory'
+                else: 
+                    graph.vs()[vertex_count]['obj_type'] = o1
+                #graph.vs()[vertex_count]['obj_type'] = o1t
                 graph.vs()[vertex_count]['node_type'] = 'object'
                 vertex_count += 1
             if o2 not in objects:
                 graph.add_vertex(o2)
                 objects[o2] = vertex_count
-                graph.vs()[vertex_count]['obj_type'] = o2t
+                if o2t == 'trajectory': 
+                    graph.vs()[vertex_count]['obj_type'] = 'trajectory'
+                else: 
+                    graph.vs()[vertex_count]['obj_type'] = o2
+                #graph.vs()[vertex_count]['obj_type'] = o2t
                 graph.vs()[vertex_count]['node_type'] = 'object'
                 vertex_count += 1
             # Add spatial node to the graph    
