@@ -31,7 +31,7 @@ def AG_setup(input_data, date, roi):
 #      Create Activity Graphs For Each Trajectory Instance     #
 #**************************************************************#
 
-def generate_graph_data(episodes, data_dir, params, tag,
+def generate_graph_data(episodes, data_dir, params, tag, obj_type = 2,
                          __out=False, test=False, vis=False):
     t0 = time.time()
     cnt=0
@@ -42,7 +42,7 @@ def generate_graph_data(episodes, data_dir, params, tag,
         if __out: rospy.loginfo('Processing for graphlets: ' + episodes_file)
         episodes_list = episodes[episodes_file]
 
-        activity_graphs[episodes_file] = Activity_Graph(episodes_list, params)
+        activity_graphs[episodes_file] = Activity_Graph(episodes_list, params, obj_type)
         activity_graphs[episodes_file].get_valid_graphlets()
 
         if vis: graph_check(activity_graphs, episodes_file) #print activity graphs to file

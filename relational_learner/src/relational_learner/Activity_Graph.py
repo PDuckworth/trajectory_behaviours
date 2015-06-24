@@ -49,15 +49,15 @@ def get_allen_relation(is1, ie1, is2, ie2):
         return 'finished_by'  
 
     
-def episodes_to_activity_graph(episodes_iter, params):
+def episodes_to_activity_graph(episodes_iter, params, obj_type):
     """Converts a list of list of episodes into activity graphs
     """
     if not isinstance(episodes_iter[0], Episodes):
-        return Activity_Graph(episodes_iter, params)
+        return Activity_Graph(episodes_iter, params, obj_type)
     else:
         activity_graphs = []
         for episode_list in episodes_iter:
-            activity_graphs.append(Activity_Graph(episode_list.episodes, params))
+            activity_graphs.append(Activity_Graph(episode_list.episodes, params, obj_type))
         return activity_graphs
 
 
@@ -68,7 +68,7 @@ def get_graph_hash(graphs):
     return map(graph_hash, [ag.abstract_graph for ag in graphs])
   
   
-def f(valid_eps, params):
+def f(valid_eps, params, obj_type):
 
     graphlet_hash_cnts={}
     valid_graphlets={}
@@ -78,7 +78,7 @@ def f(valid_eps, params):
     valid_graphlets_cnts = {}           
 
     for single_graphlet in list_of_graphlets:
-        act_graphlets = episodes_to_activity_graph(single_graphlet, params)
+        act_graphlets = episodes_to_activity_graph(single_graphlet, params, obj_type)
         (ghash, g) = get_graph_hash(act_graphlets)
 
         if ghash in valid_graphlets_cnts:
@@ -115,14 +115,21 @@ class Activity_Graph():
     OR
     
     Accepts a list of episodes where each episode is a tuple with above structure.
+
+    New Input: obj_type
+      use specific object ID = 1
+      use object type info = 2
+      encode all objects as 'object' = 3
+
     '''
-    def __init__(self, episodes, params, COLLAPSE_TEMPORAL_NODES=True):
+    def __init__(self, episodes, params, obj_type, COLLAPSE_TEMPORAL_NODES=True):
         self.spatial_obj_edges  = []
         self.temp_spatial_edges = []
         self.episodes           = []
 
         self.valid_graphlets    = {}
         self.graphlet_hash_cnts = {}
+        self.obj_type = obj_type
 
         self.graph              = self.get_activity_graph(episodes, COLLAPSE_TEMPORAL_NODES)
         self.params = params
@@ -191,7 +198,7 @@ class Activity_Graph():
         #print "\n window:episodes", valid_graphlets_dict.items()[0]
 
         list_of_output=[]
-        list_of_output.append(f(valid_graphlets_dict.items()[0], self.params))
+        list_of_output.append(f(valid_graphlets_dict.items()[0], self.params, self.obj_type))
                         
         #Extract the two dictionaries from the list output
         valid_graphlet_windowed={}
@@ -288,7 +295,7 @@ class Activity_Graph():
         
         for (o1, o1t, o2, o2t, rel, intv_start, intv_end) in episodes:
 
-            #Test to see if setting the Object Type equal to Object Name works
+            #Update the Object Type info depending on what abstraction is requested
 
             # Add objects to the graph
             if o1 not in objects:
@@ -296,18 +303,25 @@ class Activity_Graph():
                 objects[o1] = vertex_count
                 if o1t == 'trajectory': 
                     graph.vs()[vertex_count]['obj_type'] = 'trajectory'
-                else: 
-                    graph.vs()[vertex_count]['obj_type'] = o1
-                #graph.vs()[vertex_count]['obj_type'] = o1t
+                else:
+                    if self.obj_type == 1: graph.vs()[vertex_count]['obj_type'] = o1
+                    if self.obj_type == 2: graph.vs()[vertex_count]['obj_type'] = o1t
+                    if self.obj_type == 3: graph.vs()[vertex_count]['obj_type'] = 'object'
+
                 graph.vs()[vertex_count]['node_type'] = 'object'
                 vertex_count += 1
+
             if o2 not in objects:
                 graph.add_vertex(o2)
                 objects[o2] = vertex_count
                 if o2t == 'trajectory': 
                     graph.vs()[vertex_count]['obj_type'] = 'trajectory'
                 else: 
-                    graph.vs()[vertex_count]['obj_type'] = o2
+                    if self.obj_type == 1: graph.vs()[vertex_count]['obj_type'] = o2
+                    if self.obj_type == 2: graph.vs()[vertex_count]['obj_type'] = o2t
+                    if self.obj_type == 3: graph.vs()[vertex_count]['obj_type'] = 'object'
+
+                graph.vs()[vertex_count]['obj_type'] = o2
                 #graph.vs()[vertex_count]['obj_type'] = o2t
                 graph.vs()[vertex_count]['node_type'] = 'object'
                 vertex_count += 1

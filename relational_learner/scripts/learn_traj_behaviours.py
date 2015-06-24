@@ -63,9 +63,9 @@ def run_all(plotting=False, episode_store='relational_episodes'):
     # *******************************************************************#
     #                  Regions of Interest Knowledge                     #
     # *******************************************************************#
-    #rospy.loginfo('Getting Region Knowledge from roslog...')
-    #roi_knowledge, roi_temp_list = region_knowledge(soma_map, soma_config, \
-    #                                                sampling_rate=10, plot=plotting)
+    rospy.loginfo('Getting Region Knowledge from roslog...')
+    roi_knowledge, roi_temp_list = region_knowledge(soma_map, soma_config, \
+                                                    sampling_rate=10, plot=plotting)
 
     # *******************************************************************#
     #               Filter trajectories which were deemed                #
@@ -85,7 +85,7 @@ def run_all(plotting=False, episode_store='relational_episodes'):
     if plotting:
         query = ot.make_query(best_uuids)
         q = ot.query_trajectories(query)
-        q.get_poses()    
+        q.get_poses()
     """
     # *******************************************************************#
     #              Analyse the shape of the Trajectories                 #
@@ -128,7 +128,7 @@ def run_all(plotting=False, episode_store='relational_episodes'):
             all_episodes[trajectory["uuid"]] = Mongodb_to_list(trajectory["episodes"])
             cnt+=1
         print "Total Number of Episodes queried = %s." % cnt
-        print "Number of Trajectories after filtering = %s." % len(all_episodes)
+        print "Number of Trajectories after filtering by displacement/poses = %s." % len(all_episodes)
 
         if len(all_episodes) < 12:
             print "Not enough episodes in region %s to learn model." % roi
@@ -138,11 +138,16 @@ def run_all(plotting=False, episode_store='relational_episodes'):
         #            Activity Graphs/Code_book/Histograms               #
         # **************************************************************#
         rospy.loginfo('Generating Activity Graphs')
-
+        
         params, tag = gh.AG_setup(input_data, date, str_roi)
         print "INFO: ", params, tag, activity_graph_dir
-
-        gh.generate_graph_data(all_episodes, activity_graph_dir, params, tag)
+        print "NOTE: Currently using Object ID in the graphlets"
+        """
+        1. Use specific object ID. 
+        2. Use object type info.
+        3. Encode all objects as "object".
+        """
+        gh.generate_graph_data(all_episodes, activity_graph_dir, params, tag, obj_type = 1)
 
         # **************************************************************#
         #           Generate Feature Space from Histograms              #
