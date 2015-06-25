@@ -16,7 +16,7 @@ import getpass
 import numpy as np
 from scipy import spatial
 import cPickle as pickle
-
+import matplotlib.pyplot as plt
 from geometry_msgs.msg import Pose, Quaternion
 from human_trajectory.msg import Trajectory, Trajectories
 from soma_trajectory.srv import TrajectoryQuery, TrajectoryQueryRequest, TrajectoryQueryResponse
@@ -29,7 +29,6 @@ import relational_learner.graphs_handler as gh
 
 from novelTrajectories.traj_data_reader import *
 from relational_learner.learningArea import *
-
 
 def Mongodb_to_list(res):
     """Convert the EpisodeMsg into a list of episodes
@@ -52,6 +51,30 @@ def Mongodb_to_list(res):
     return ep_list
 
 
+def keep_percentage_of_data(data, upper=0.0, lower=0.1, vis=False):
+    a = list(reversed(sorted(data, key=data.get)))
+    l = len(a)
+    upper_ = int(l*upper)
+    lower_ = int(l*lower)
+    best_uuids = a[upper_:lower_]
+
+    print "%s - %s percent selected (sorted by highest ratio). %s returned." % (upper*100, lower*100, len(best_uuids))
+    query = ot.make_query(best_uuids)
+    q = ot.query_trajectories(query)
+    q.get_poses()
+
+    if vis:
+        d = data.values()
+        plt.hist(d, bins=20)
+        plt.xlim([0, max(d)])
+        plt.title("Trajectory Displacement Histogram")        
+        plt.xlabel('displacement/#poses')
+        plt.ylabel('count')
+        plt.show()
+
+    return q, best_uuids
+
+    
 def run_all(plotting=False, episode_store='relational_episodes'):
     (directories, config_path, input_data, date) = util.get_learning_config()
     (data_dir, qsr, trajs, activity_graph_dir, learning_area) = directories
@@ -76,16 +99,9 @@ def run_all(plotting=False, episode_store='relational_episodes'):
     store='people_trajectory'
     all_data, ratios = ot.filtered_trajectorys(just_ids=False, msg_store=store)
 
-    #Filter on diplacement/poses ratio
-    request_percent = 0.10
-    a = list(reversed(sorted(ratios, key=ratios.get)))
-    request = int(len(a) * request_percent)
-    best_uuids = a[:request]
-    print "best %s selected (sorted by highest ratio)" % request
-    if plotting:
-        query = ot.make_query(best_uuids)
-        q = ot.query_trajectories(query)
-        q.get_poses()
+    ## Filter on diplacement/poses ratio
+    q, best_uuids = keep_percentage_of_data(ratios, upper=0.0, lower=0.1, vis=plotting)
+
     """
     # *******************************************************************#
     #              Analyse the shape of the Trajectories                 #
