@@ -1,0 +1,17 @@
+<launch>
+    <arg name="vis" default="false" />
+    <arg name="temp_thresh" default="0.10" />
+
+
+    <arg name="machine" default="localhost" />
+    <arg name="user" default="" />
+
+    <machine name="$(arg machine)" address="$(arg machine)" env-loader="$(optenv ROS_ENV_LOADER )" user="$(arg user)" default="true"/>
+    
+    <node pkg="relation_learner" type="novelty_client" name="novelty_client" output="screen">
+        <param name="visualise" value="$(arg vis)" type="bool"/>
+        <param name="temp_threshold" value="$(arg temp_thresh)" type="float"/>
+    </node>
+
+    <node pkg="relation_learner" type="novelty_server" name="episode_server" output="screen"/>
+</launch> 

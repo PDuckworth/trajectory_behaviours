@@ -82,12 +82,10 @@ if __name__ == "__main__":
     rospy.init_node('novelty_client')
     print "novelty client running..."
 
-    if len(sys.argv) == 2:
-        vis_graph=bool(sys.argv[1])
-    else:
-        vis_graph=False
+    vis = rospy.get_param("~visualise", "false")
+    temp_threshold = rospy.get_param("~temp_threshold", 0.1)
     print "Usage: Visualising Activity Graphs is not selected. Turn_on = 1. 0 by default."
     print "Graph viz = ", vis_graph
 
-    nc = NoveltyClient(threshold=0.10, vis=vis_graph)
+    nc = NoveltyClient(threshold, vis)
     rospy.spin()

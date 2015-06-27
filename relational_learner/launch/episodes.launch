@@ -1,0 +1,14 @@
+<launch>
+    <arg name="vis" default="false" />
+
+    <arg name="machine" default="localhost" />
+    <arg name="user" default="" />
+
+    <machine name="$(arg machine)" address="$(arg machine)" env-loader="$(optenv ROS_ENV_LOADER )" user="$(arg user)" default="true"/>
+    
+    <node pkg="relation_learner" type="episodes_client" name="episodes_client" output="screen">
+        <param name="visualise" value="$(arg vis)" type="bool"/>
+    </node>
+
+    <node pkg="relation_learner" type="episodes_server" name="episode_server" output="screen"/>
+</launch> 

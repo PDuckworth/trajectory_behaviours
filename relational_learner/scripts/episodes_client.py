@@ -64,10 +64,8 @@ class EpisodeClient(object):
 
 if __name__ == "__main__":
     rospy.init_node('episodes_client')
-    if len(sys.argv) == 2:
-        vis=bool(sys.argv[1])
-    else:
-        vis=False
+
+    vis = rospy.get_param("~visualise", "false")
     print "Usage: QSR visualisation in RVIZ not selected. Turn_on = 1. 0 by default."
     print "qsr_viz = ", vis
 
