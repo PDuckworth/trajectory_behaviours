@@ -161,11 +161,13 @@ class QueryClient():
         rospy.wait_for_service(service_name)
         self.ser = rospy.ServiceProxy(service_name, TrajectoryQuery)
 
-    def query(self, query, vis = False):
+    def query(self, query, vis = False, vis_option = "random"):
         try:
             req = TrajectoryQueryRequest()
             req.query = query
             req.visualize = vis
+            req.vis_option = vis_option
+            print req
             res = self.ser(req)
             return res
         except rospy.ServiceException, e:
@@ -173,9 +175,10 @@ class QueryClient():
 
 
 class query_trajectories():
-    def __init__(self, query):
+    def __init__(self, query, colour="direction_red_blue"):
         client = QueryClient()
-        self.res = client.query(query, True)
+        vis_option = colour
+        self.res = client.query(query, True, vis_option)
         self.filtered_trajs = []
         self.uuids_list = []
 
@@ -269,8 +272,8 @@ if __name__ == "__main__":
     rospy.init_node("trajectory_obtainer")
 
     data_dir= '/home/strands/STRANDS/'
-    soma_map = 'cs_lab_final'
-    soma_config = 'static_endpoints'
+    soma_map = 'g4s'
+    soma_config = 'g4s_novelty'
     
     ## Filter All Trajectories in message store
     request = 0.10
@@ -321,7 +324,7 @@ if __name__ == "__main__":
             for cnt, trajectory in enumerate(q.filtered_trajs):
                 print cnt, trajectory.uuid 
 
-                ret = ec.episode_client(trajectory)
+                #ret = ec.episode_client(trajectory)
 
 
             traj_file = os.path.join(data_dir + 'trajectory_dump/using_obj_ids_roi_%s_end2.p') % roi
