@@ -69,7 +69,7 @@ class Learning():
     def save(self, dir):
         print("Saving...")
         print self.roi
-        filename = os.path.join(dir, self.roi + '_smartThing_filtered.p')
+        filename = os.path.join(dir, self.roi + '_smartThing.p')
 
         foo = { "ROI": self.roi, "feature_space": self.feature_space, \
                 "code_book": self.code_book, "graphlet_book": self.graphlet_book, \
@@ -285,8 +285,8 @@ class Learning():
         fitting = activity_time(timestamps_vec, interval=interval)
 
         ## Debug the Online Temporal Plot:
-        print "Saving Timepoints as a test:" 
-        pickle.dump(timestamps_vec, open('/home/strands/TIME_TEST.p', "w"))
+        #print "Saving Timepoints as a test:" 
+        #pickle.dump(timestamps_vec, open('/home/strands/TIME_TEST.p', "w"))
 
         self.methods["time_dyn_clst"] = dyn_cl
         self.methods["time_fitting"] = fitting

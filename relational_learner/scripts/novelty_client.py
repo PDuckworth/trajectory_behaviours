@@ -6,7 +6,6 @@ from std_msgs.msg import String
 from relational_learner.srv import *
 from relational_learner.msg import *
 import numpy as np
-import matplotlib.pyplot as plt
 
 class NoveltyClient(object):
     
@@ -85,7 +84,7 @@ if __name__ == "__main__":
     vis = rospy.get_param("~visualise", "false")
     temp_threshold = rospy.get_param("~temp_threshold", 0.1)
     print "Usage: Visualising Activity Graphs is not selected. Turn_on = 1. 0 by default."
-    print "Graph viz = ", vis_graph
+    print "Graph viz = ", vis
 
-    nc = NoveltyClient(threshold, vis)
+    nc = NoveltyClient(temp_threshold, vis)
     rospy.spin()

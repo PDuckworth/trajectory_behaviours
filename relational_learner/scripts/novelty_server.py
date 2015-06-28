@@ -1,6 +1,9 @@
 #!/usr/bin/env python
 import rospy
 import sys, os, getpass, time
+import matplotlib
+matplotlib.use("Agg")
+import matplotlib.pyplot as plt
 import ConfigParser
 import itertools
 import cPickle as pickle
@@ -20,7 +23,6 @@ from mongodb_store.message_store import MessageStoreProxy
 #from std_msgs.msg import Header
 import cv2
 import cv_bridge
-import matplotlib.pyplot as plt
 from sensor_msgs.msg import Image
 
 
