@@ -167,7 +167,7 @@ class QueryClient():
             req.query = query
             req.visualize = vis
             req.vis_option = vis_option
-            print req
+            print req.vis_option
             res = self.ser(req)
             return res
         except rospy.ServiceException, e:
