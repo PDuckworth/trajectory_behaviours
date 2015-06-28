@@ -8,6 +8,9 @@ __copyright__ = "Copyright 2015, University of Leeds"
 import rospy
 import pymongo
 import os, sys, time
+import matplotlib
+matplotlib.use("Agg")
+import matplotlib.pyplot as plt
 import logging
 import argparse
 import itertools
@@ -16,7 +19,7 @@ import getpass
 import numpy as np
 from scipy import spatial
 import cPickle as pickle
-import matplotlib.pyplot as plt
+
 from geometry_msgs.msg import Pose, Quaternion
 from human_trajectory.msg import Trajectory, Trajectories
 from soma_trajectory.srv import TrajectoryQuery, TrajectoryQueryRequest, TrajectoryQueryResponse
@@ -125,7 +128,7 @@ def run_all(plotting=False, episode_store='relational_episodes'):
     rospy.loginfo("0. Running ROI query from message_store")
     for roi in gs.roi_ids(soma_map, soma_config):
         str_roi = "roi_%s" % roi
-        # if roi != '12': continue
+        #if roi != '1': continue
 
         print '\nROI: ', gs.type_of_roi(roi, soma_map, soma_config), roi
         query = {"soma_roi_id": str(roi)}
