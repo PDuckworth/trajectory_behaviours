@@ -8,10 +8,10 @@
 
     <machine name="$(arg machine)" address="$(arg machine)" env-loader="$(optenv ROS_ENV_LOADER )" user="$(arg user)" default="true"/>
     
-    <node pkg="relational_learner" type="novelty_client" name="novelty_client" output="screen">
+    <node pkg="relational_learner" type="novelty_client.py" name="novelty_client" output="screen">
         <param name="visualise" value="$(arg vis)" type="bool"/>
         <param name="temp_threshold" value="$(arg temp_thresh)" type="double"/>
     </node>
 
-    <node pkg="relational_learner" type="novelty_server" name="novelty_server" output="screen"/>
+    <node pkg="relational_learner" type="novelty_server.py" name="novelty_server" output="screen"/>
 </launch> 
