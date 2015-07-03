@@ -70,14 +70,14 @@ def keep_percentage_of_data(data, upper=0.0, lower=0.1, vis=False):
         d = data.values()
         plt.hist(d, bins=20)
         plt.xlim([0, max(d)])
-        plt.title("Trajectory Displacement Histogram")        
+        plt.title("Trajectory Displacement Histogram")
         plt.xlabel('displacement/#poses')
         plt.ylabel('count')
         plt.show()
 
     return q, best_uuids
 
-    
+
 def run_all(plotting=False, episode_store='relational_episodes'):
     (directories, config_path, input_data, date) = util.get_learning_config()
     (data_dir, qsr, trajs, activity_graph_dir, learning_area) = directories
@@ -98,12 +98,11 @@ def run_all(plotting=False, episode_store='relational_episodes'):
     #          noise by using only people_trajectory msg store           #
     #           and filter on their distance covered per pose            #
     # *******************************************************************#
-
+    # Filter on diplacement/poses ratio
+    # Use if running online. Need to filter the message store trajectories before getting the corresponding episodes
     store='people_trajectory'
-    all_data, ratios = ot.filtered_trajectorys(just_ids=False, msg_store=store)
-
-    ## Filter on diplacement/poses ratio
-    q, best_uuids = keep_percentage_of_data(ratios, upper=0.0, lower=0.1, vis=plotting)
+    all_data, ratios_dict = ot.filtered_trajectorys(just_ids=False, msg_store=store)
+    q, best_uuids = keep_percentage_of_data(ratios_dict, upper=0.0, lower=0.1, vis=plotting)
 
     """
     # *******************************************************************#
@@ -111,7 +110,7 @@ def run_all(plotting=False, episode_store='relational_episodes'):
     #                                                                    #
     # *******************************************************************#
     rospy.loginfo('Generating Heatmap of trajectories...')
-    uuid_pose_dict = { your_key: all_data[your_key] for your_key in best_uuids}
+    uuid_pose_dict = { your_key: [your_key] for your_key in best_uuids}
 
     dt = th.Discretise_Trajectories(data=uuid_pose_dict, bin_size=0.2, filter_vel=1, verbose=False)
     dt.heatmap_run(vis=plotting, with_analysis=plotting)
@@ -120,7 +119,7 @@ def run_all(plotting=False, episode_store='relational_episodes'):
     interest_points = dt.plot_polygon(vis=plotting, facecolor='green', alpha=0.4)
     print "interesting points include:\n", interest_points
     dt.markov_chain.display_and_save(layout='nx', view=True, path=trajs)
-    
+
     """
     # *******************************************************************#
     #                  Obtain Episodes in ROI                            #
@@ -142,8 +141,8 @@ def run_all(plotting=False, episode_store='relational_episodes'):
         for cnt, trajectory in enumerate(res):
             # Get trajectory times of all trajectories. Not filtered on displacement etc.
             trajectory_times.append(trajectory["start_time"])
-
             if trajectory["uuid"] not in best_uuids: continue
+
             all_episodes[trajectory["uuid"]] = Mongodb_to_list(trajectory["episodes"])
             cnt+=1
         print "Total Number of Episodes queried = %s." % cnt
@@ -157,12 +156,12 @@ def run_all(plotting=False, episode_store='relational_episodes'):
         #            Activity Graphs/Code_book/Histograms               #
         # **************************************************************#
         rospy.loginfo('Generating Activity Graphs')
-        
+
         params, tag = gh.AG_setup(input_data, date, str_roi)
         print "INFO: ", params, tag, activity_graph_dir
         print "NOTE: Currently using Object ID in the graphlets"
         """
-        1. Use specific object ID. 
+        1. Use specific object ID.
         2. Use object type info.
         3. Encode all objects as "object".
         """
@@ -180,7 +179,7 @@ def run_all(plotting=False, episode_store='relational_episodes'):
         #                    Create a similarty space                   #
         # **************************************************************#
         # rospy.loginfo('Create Similarity Space')
-        
+
         # similarity_space = get_similarity_space(feature_space)
         # dictionary_of_similarity = {}
 
@@ -208,21 +207,23 @@ def run_all(plotting=False, episode_store='relational_episodes'):
         smartThing.pca_graphlets(pca, variable_scores, top)
 
         rospy.loginfo('Good ol k-Means')
-        smartThing.kmeans(k=3)  # Can pass k, or auto selects min(penalty)
+        test_set = False
+        smartThing.kmeans(show_a_test_set=test_set)  # Can pass k, or auto selects min(penalty)
 
         #Trajectory Query Service Needs to be running:
         kmeans_analysis(smartThing.methods["kmeans_cluster_composition"])
-        
 
+        if test_set: smartThing.kmeans_test_cases()
         # *******************************************************************#
         #                    Temporal Analysis                               #
         # *******************************************************************#
         rospy.loginfo('Learning Temporal Measures')
         # print "traj times = ", trajectory_times, "\n"
         smartThing.time_analysis(trajectory_times, plot=plotting)
+        # Future: Save a dictionary of IDs, timestamps and cluster composition for further analysis
         #smartThing.methods["temporal_list_of_uuids"] = trajectory_times
 
-        # Add the region knowledge to smartThing
+        # Add the region knowledge to smartThing - Future: make modula.
         try:
             smartThing.methods["roi_knowledge"] = roi_knowledge[roi]
             smartThing.methods["roi_temp_list"] = roi_temp_list[roi]
@@ -230,6 +231,8 @@ def run_all(plotting=False, episode_store='relational_episodes'):
             smartThing.methods["roi_knowledge"] = 0
             smartThing.methods["roi_temp_list"] = [0] * 24
 
+        # Future: create a msg type and upload everything to Mongodb
+        # Future: Make learning incremental, therefore load, learn, save.
         smartThing.save(learning_area)
         print "Learnt models for: "
         for key in smartThing.methods:

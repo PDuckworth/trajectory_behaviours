@@ -160,13 +160,31 @@ class Learning():
 
         return
 
-    def kmeans(self, k=None):
+    def kmeans_test_cases(self):
+        kmeans_test_set(self.estimator, self.X_test, self.X_test_ids)
+
+
+    def kmeans(self, k=None, show_a_test_set=False):
+
         np.random.seed(42)
         X = np.array(self.feature_space)
+        X_uuids = self.X_uuids
         #scaler = StandardScaler()
         #scaler.fit(X)
         #X_s = scaler.transform(X)        
-        data = X #_s
+        
+        ## Visualise a test set
+        if show_a_test_set:
+            ten_percent = int(len(X)*0.1)
+            #np.random.shuffle(X)
+            data = X[:len(X)-ten_percent]
+            
+            self.X_test = X[len(X)-ten_percent:] #final 10 percent
+            print "shape of test set: ",  self.X_test.shape
+            self.X_test_ids = X_uuids[len(X)-ten_percent:]
+        else:
+            data = X
+    
         if k!=None:
             (estimator, penalty) = self.kmeans_util(data, k=k)
         else:
@@ -185,11 +203,11 @@ class Learning():
             print "k = %d has minimum inertia*penalty" %k
 
         estimator = self.kmeans_cluster_radius(data, estimator)
-        
+        if show_a_test_set: self.estimator = estimator
+
         self.methods["kmeans"] = estimator
         if self.visualise: plot_pca(data, k)
         rospy.loginfo('Done\n')
-
 
     def kmeans_cluster_radius(self, data, estimator):
         n_samples, n_features = data.shape
@@ -216,22 +234,33 @@ class Learning():
             cluster_composition[label].append(uuid)
             #print "Datapoint = %s, UUID = %s belongs to %s cluster" %(i, uuid, label)
 
-        # Analyse the trajectories which belong to each learnt cluster
-        for key, value in cluster_composition.items():
-            print "Cluster %s has %s datapoints." % (key, len(value))
-        self.methods["kmeans_cluster_composition"] = cluster_composition
-
         means, std = {}, {}
         for label in cluster_radius:
             means[label] = np.mean(cluster_radius[label])
             std[label] = np.std(cluster_radius[label])
         print "avg distance to clusters", means
         print "std distance to clusters", std
-        
+
+        # Analyse the trajectories which belong to each learnt cluster
+        filtered_cluster_composition = {}
+        for cluster_label, list_of_uuids in cluster_composition.items():
+            print "Cluster %s has %s datapoints." % (cluster_label, len(list_of_uuids))
+            filtered_cluster_composition[cluster_label] = []
+
+            for cnt, dst in enumerate(cluster_radius[cluster_label]):
+                if dst < means[cluster_label]: filtered_cluster_composition[cluster_label].append(list_of_uuids[cnt])
+                
+        print "\nFiltering the cluster composition for visualisation"
+        for key, value in filtered_cluster_composition.items():
+            print "Cluster %s has %s trajectories < the mean dst." % (key, len(value))
+
+        #self.methods["kmeans_cluster_composition"] = cluster_composition
+        self.methods["kmeans_cluster_composition"] = filtered_cluster_composition
         estimator.cluster_dist_means = means
         estimator.cluster_dist_std = std
 
         return estimator
+
 
     def kmeans_util(self, data, k=None):
         n_samples, n_features = data.shape
@@ -549,8 +578,41 @@ def kmeans_analysis(data, vis=True):
         import relational_learner.obtain_trajectories as ot
         query = ot.make_query(list_of_uuids_to_vis) 
         #print query
-        q = ot.query_trajectories(query)
+        q = ot.query_trajectories(query, True, "direction_red_green")
         raw_input("press enter for next cluster")
+
+
+def kmeans_test_set(estimator, X_test, X_test_ids):
+    import relational_learner.obtain_trajectories as ot
+
+    novel_uuids, not_novel = [], []
+    for cnt, test_histogram in enumerate(X_test):
+        uuid = X_test_ids[cnt]
+        print "\n", uuid
+        closest_cluster = estimator.predict(test_histogram)
+        print closest_cluster
+
+        a = test_histogram
+        b = estimator.cluster_centers_[closest_cluster]
+        dst = distance.euclidean(a,b)
+        print "DISTANCE = ", dst
+
+        mean = estimator.cluster_dist_means[closest_cluster[0]]
+        std = estimator.cluster_dist_std[closest_cluster[0]]
+        print "Mean & std of that cluster = ",  mean, std
+
+        if dst > mean + (std): 
+            novel_uuids.append(uuid)
+            print "Novel"
+            query = ot.make_query([uuid]) 
+            q = ot.query_trajectories(query, True, "direction_red_green")
+            raw_input("novel trajectories shown")
+        else: 
+            not_novel.append(uuid)
+
+    query = ot.make_query(not_novel) 
+    q = ot.query_trajectories(query, True, "direction_red_green")
+    raw_input("not novel trajectories shown")
 
 
 if __name__ == "__main__":
