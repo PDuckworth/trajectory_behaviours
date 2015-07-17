@@ -49,7 +49,7 @@ class query_objects():
 
                 x = log['pose']['position']['x']
                 y = log['pose']['position']['y']
-                z = log['pose']['position']['z']  
+                z = log['pose']['position']['z']
                 obj_instance = log['type'] + '_' + log['id']
 
                 if _id not in self.all_objects:
@@ -62,7 +62,7 @@ class query_objects():
     def check(self):
         print 'All objects in SOMA:'
         for i, key in enumerate(self.all_objects):
-            print repr(i) + ",  " + repr(key) + ",  " + repr(self.all_objects[key]) 
+            print repr(i) + ",  " + repr(key) + ",  " + repr(self.all_objects[key])
         print repr(len(self.all_objects)) + ' objects Loaded.\n'
 
 
@@ -77,7 +77,7 @@ def filtered_trajectorys(just_ids=True, msg_store='people_trajectory', timedelta
 
     rospy.loginfo("Query: %s" % query )
     res = store.find_projection(query, {"uuid":1, "trajectory":1})
-    rospy.loginfo("Result: %s filtered trajectories" % res.count()) 
+    rospy.loginfo("Result: %s filtered trajectories" % res.count())
 
     if just_ids:
         rospy.loginfo("Getting UUIDs...")
@@ -148,10 +148,10 @@ def trajectory_object_dist(objects, trajectory_poses, select=4):
         #select closest 4 (%select) objects or landmarks
         closest_dists = keys [0:select]
         closest_objects[uuid]=[]
-    
+
         for dist in closest_dists:
-            closest_objects[uuid].append(dist_objs[dist]) 
-        
+            closest_objects[uuid].append(dist_objs[dist])
+
     return closest_objects
 
 
@@ -185,7 +185,7 @@ class query_trajectories():
 
         if self.res.error:
             rospy.logerr("Result: error: %s (Invalid query: %s)" % (self.res.error, query))
-        else:      
+        else:
             print "Query returned: %s trajectories. " % repr(len(self.res.trajectories.trajectories))
 
     def get_best_trajectories(self, requested=0.1):
@@ -232,7 +232,7 @@ class query_trajectories():
         self.trajectory_times = []
 
         for trajectory in self.res.trajectories.trajectories:
-            self.trajs[trajectory.uuid] = []          
+            self.trajs[trajectory.uuid] = []
             self.trajectory_times.append(trajectory.start_time.secs) # Temporal Info
             for entry in trajectory.trajectory:
                 x=entry.pose.position.x
@@ -246,9 +246,9 @@ def convert_keys_to_string(dictionary):
         return str(dictionary)
     elif isinstance(dictionary, list):
         return dictionary
-    return dict((str(k), convert_keys_to_string(v)) 
+    return dict((str(k), convert_keys_to_string(v))
         for k, v in dictionary.items())
-   
+
 
 class EpisodeClient(object):
 
@@ -259,7 +259,7 @@ class EpisodeClient(object):
 
     def episode_client(self, Trajectory):
         rospy.wait_for_service('/episode_service')
-        proxy = rospy.ServiceProxy('/episode_service', EpisodeService)  
+        proxy = rospy.ServiceProxy('/episode_service', EpisodeService)
         req = EpisodeServiceRequest(Trajectory, False, self.current_uuids_detected, \
                                     self.msg_store)
         ret = proxy(req)
@@ -270,6 +270,7 @@ class EpisodeClient(object):
 def make_query(uuids):
     """make a people_trajectory 'trajectory_query_service' query from a list of uuids"""
 
+    if len(uuids)<1: return  None
     aa = ['"%s"' %i for i in uuids]
     query = '''{"uuid" :{ "$in": ['''
     for i in aa[:(len(aa)-1)]:
@@ -302,7 +303,7 @@ def get_uuids_from_traj_store(request_percent = 0.1, traj_store='people_trajecto
 
     return best_uuids
 
-    
+
 if __name__ == "__main__":
     global __out
     __out = True
@@ -311,7 +312,7 @@ if __name__ == "__main__":
     data_dir= '/home/strands/STRANDS/'
     soma_map = 'g4s'
     soma_config = 'g4s_landmarks'
-    
+
     ## Filter All Trajectories in message store
     #request = 1.0
     traj_store = 'people_trajectory'
@@ -322,7 +323,7 @@ if __name__ == "__main__":
     rospy.loginfo("Running trajectoy/ROI query ")
     gs = GeoSpatialStoreProxy('geospatial_store','soma')
     cnt=0
-   
+
     #Query two days data at a time.
     t1 = datetime.datetime(2015, 5, 20, 00, 0, 0, 000000)
     t2 = datetime.datetime(2015, 5, 23, 00, 0, 0, 000000)
@@ -338,18 +339,18 @@ if __name__ == "__main__":
         geom = gs.geom_of_roi(roi, soma_map, soma_config)
         res = gs.objs_within_roi(geom, soma_map, soma_config)
         if res == None:
-            print "No Objects in this Region"            
+            print "No Objects in this Region"
             continue
         objects_in_roi = {}
         print "Objects: "
         for i in res:
             key = i['type'] +'_'+ i['soma_id']
-            objects_in_roi[key] = i['loc']['coordinates']       
+            objects_in_roi[key] = i['loc']['coordinates']
             print key, objects_in_roi[key]
 
         #geom_str = convert_keys_to_string(geom)
         #query = '''{"loc": { "$geoWithin": { "$geometry":
-        query = '''{"loc": { "$geoIntersects": { "$geometry": 
+        query = '''{"loc": { "$geoIntersects": { "$geometry":
         { "type" : "Polygon", "coordinates" : %s }}}, "start": {"$lt": %s, "$gte":%s}}''' % (geom['coordinates'], query_end_seconds, query_start_seconds )
 
         st = time.time()
@@ -365,13 +366,13 @@ if __name__ == "__main__":
         print "Takes: ", time.time() - st
 
         vis = True
-        if vis: 
+        if vis:
             print len(q.uuids_list)
             query = make_query(q.uuids_list)
             q2 = query_trajectories(query, True, "direction_red_green")
 
         if len(q.uuids_list)==0:
-            print "No Trajectories in this Region"            
+            print "No Trajectories in this Region"
             continue
         else:
             ec = EpisodeClient(msg_store = episode_store)
@@ -397,7 +398,7 @@ if __name__ == "__main__":
         ##To Dump trajectories for testing
         #data_dir='/home/strands/STRANDS'
         #obj_file  = os.path.join(data_dir, 'obj_dump.p')
-        
+
         #pickle.dump(objects_in_roi, open(obj_file, 'w'))
         #pickle.dump(q.trajs, open(traj_file, 'w'))
 
@@ -405,4 +406,3 @@ if __name__ == "__main__":
         #static_things = pins.poses_landmarks
         #static_things = objects_in_roi
         #objects_per_trajectory = trajectory_object_dist(static_things, trajectory_poses)
-

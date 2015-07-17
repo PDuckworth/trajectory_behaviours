@@ -4,4 +4,6 @@ string soma_roi_id
 string soma_map
 string soma_config
 int64 start_time
+string qsr_type
+string qsr_params
 relational_learner/episodeMsg[] episodes

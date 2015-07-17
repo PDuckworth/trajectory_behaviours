@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 
-"""compute_spatial_relations.py: Computes spatial relations."""
+"""Analyse Episode store using Machine Learning techniques (offline)"""
 
 __author__ = "Paul Duckworth"
 __copyright__ = "Copyright 2015, University of Leeds"
