@@ -35,7 +35,7 @@ class Importer(object):
 
 def episodesMsg_to_list(req):
     """Convert the EpisodesMsg into a list of episodes
-       EpisodesMsg: 
+       EpisodesMsg:
             std_msgs/Header header
             string soma_roi_id
             string soma_map
@@ -66,7 +66,7 @@ class novelty_class(object):
         self.pub_T = rospy.Publisher('/novelty/temporal_novelty', \
                     Image, latch=True, queue_size=1)
         self.pub_S = rospy.Publisher('/novelty/spatial_novelty', \
-                    Image, latch=True, queue_size=1)   
+                    Image, latch=True, queue_size=1)
 
         self.spatial_results = {}
         self.keep_ids = []
@@ -95,21 +95,21 @@ class novelty_class(object):
         plt.ylabel('probability')
         plt.legend(loc = 'best')
         filename='/tmp/temporal_plot_%s.png' % roi
-        plt.savefig(filename, bbox_inches='tight', dpi=100)  
+        plt.savefig(filename, bbox_inches='tight', dpi=100)
         img = cv2.imread(filename)
         activity_graph_msg = cv_bridge.CvBridge().cv2_to_imgmsg(img, encoding="bgr8")
-        self.pub_T.publish(activity_graph_msg)  
+        self.pub_T.publish(activity_graph_msg)
 
     def get_temporal_values(self, plot_interval, period=86400):
         pc = []
         pf = []
         #query model at these points to generate graph:
-        timestamps = np.arange(0,period,plot_interval) 
+        timestamps = np.arange(0,period,plot_interval)
         for v in timestamps:
             pc.append(self.dyn_cl.query_clusters(v))
             pf.append(self.fitting.query_model(v))
-        return timestamps, pc, pf 
-        
+        return timestamps, pc, pf
+
     def publish_AG_image(self):
         img = cv2.imread('/tmp/act_gr.png')
         activity_graph_msg = cv_bridge.CvBridge().cv2_to_imgmsg(img, encoding="bgr8")
@@ -120,7 +120,7 @@ class novelty_class(object):
         self.keep_ids.append(uuid)
         if uuid in self.spatial_results: self.spatial_results[uuid][0:9] = self.spatial_results[uuid][1:10]
         else: self.spatial_results[uuid] = [(0,0,0)]*10
-        self.spatial_results[uuid][9] = (dst, mean, std) 
+        self.spatial_results[uuid][9] = (dst, mean, std)
 
         #print "keeps", self.keep_ids
         remove = []
@@ -145,7 +145,7 @@ class novelty_class(object):
             x=[]
             y, mean, std = [], [], []
             for x_, (y_, mean_, std_) in enumerate(values):
-                if y_ == 0: continue 
+                if y_ == 0: continue
                 x.append(x_)
                 y.append(y_)
                 mean.append(mean_)
@@ -186,12 +186,12 @@ class novelty_class(object):
 
         episodes_file = all_episodes.keys()[0]
         print "Length of Episodes = ", len(all_episodes[episodes_file])
-     
+
         (directories, config_path, input_data, date) = util.get_learning_config()
         (data_dir, qsr, trajs, graphs, learning_area) = directories
         #(data_dir, config_path, params, date) = util.get_qsr_config()
         (soma_map, soma_config) = util.get_map_config(config_path)
-        
+
         if eps_soma_map != soma_map: raise ValueError("Config file soma_map not matching published episodes")
         if eps_soma_config != soma_config: raise ValueError("Config file soma_config not matching published episodes")
 
@@ -209,21 +209,22 @@ class novelty_class(object):
         if req.visualise_graphs: self.publish_AG_image()
 
 
-        #print "\n  ACTIVITY GRAPH: \n", activity_graphs[episodes_file].graph 
+        #print "\n  ACTIVITY GRAPH: \n", activity_graphs[episodes_file].graph
         ta1=time.time()
-        
+
         """5. Load spatial model"""
         print "\n  MODELS LOADED :"
-        file_ = os.path.join(data_dir + 'learning/roi_' + roi + '_smartThing.p')
-        smartThing=la.Learning(load_from_file=file_)
+        something = la.Learning(load_from_file='mongodb', roi=str(roi))
+
+        #file_ = os.path.join(data_dir + 'learning/roi_' + roi + '_smartThing.p')
+        #smartThing=la.Learning(load_from_file=file_)
         if smartThing.flag == False: return NoveltyDetectionResponse()
 
         print "code book = ", smartThing.code_book
 
-        """6. Create Feature Vector""" 
+        """6. Create Feature Vector"""
         test_histogram = activity_graphs[episodes_file].get_histogram(smartThing.code_book)
         print "HISTOGRAM = ", test_histogram
-      
 
         """6.5 Upload data to Mongodb"""
         """activityGraphMsg:
@@ -243,8 +244,8 @@ class novelty_class(object):
         #            header=header, uuid=req.episodes.uuid, roi=roi, \
         #            histogram = test_histogram, codebook = smartThing.code_book, \
         #            episodes=get_episode_msg(ep.all_episodes[episodes_file]))
-       
-        #query = {"uuid" : str(uuid)} 
+
+        #query = {"uuid" : str(uuid)}
         #p_id = Importer()._store_client.update(message=ag, message_query=query,\
         #                                       meta=meta, upsert=True)
         #tm1 = time.time()
@@ -252,7 +253,7 @@ class novelty_class(object):
         """7. Calculate Distance to clusters"""
         estimator = smartThing.methods['kmeans']
         closest_cluster = estimator.predict(test_histogram)
-        
+
         print "INERTIA = ", estimator.inertia_
         #print "CLUSTER CENTERS = ", estimator.cluster_centers_
 
@@ -281,7 +282,7 @@ class novelty_class(object):
         time_of_day = start_time%86400
         pc = self.dyn_cl.query_clusters(time_of_day)
         pf = self.fitting.query_model(time_of_day)
-        
+
         print "PC = ", pc
         print "PF = ", pf
 
@@ -303,7 +304,7 @@ class novelty_class(object):
         except KeyError:
             print "No Region knowledge in `region_knowledge` db"
             th = 0
-     
+
         print "\n Service took: ", time.time()-t0, "  secs."
         print "  AG took: ", ta1-ta0, "  secs."
         #print "  Mongo upload took: ", tm1-tm0, "  secs."
@@ -314,7 +315,7 @@ class novelty_class(object):
 def calculate_novelty():
     rospy.init_node('novelty_server')
     n = novelty_class()
-    
+
 
                         #service_name       #serive_type       #handler_function
     s = rospy.Service('/novelty_detection', NoveltyDetection, \
@@ -326,4 +327,3 @@ def calculate_novelty():
 
 if __name__ == "__main__":
     calculate_novelty()
-

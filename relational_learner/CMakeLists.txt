@@ -56,6 +56,7 @@ catkin_python_setup()
    #episodes_to_mongo.msg
    activityGraphMsg.msg
    RegionKnowledgeMsg.msg
+   spatialModelMsg.msg
 #   Message2.msg
  )
 
@@ -70,7 +71,7 @@ add_service_files(
 
 ## Generate actions in the 'action' folder
 add_action_files(
-    DIRECTORY action 
+    DIRECTORY action
     FILES
     OfflineLearning.action
 #   Action2.action

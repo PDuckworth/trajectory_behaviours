@@ -37,7 +37,7 @@ def generate_graph_data(episodes, data_dir, params, tag, obj_type = 2,
     cnt=0
     activity_graphs = {}
 
-    for episodes_file in episodes:  
+    for episodes_file in episodes:
 
         if __out: rospy.loginfo('Processing for graphlets: ' + episodes_file)
         episodes_list = episodes[episodes_file]
@@ -48,13 +48,13 @@ def generate_graph_data(episodes, data_dir, params, tag, obj_type = 2,
         if vis: graph_check(activity_graphs, episodes_file) #print activity graphs to file
         cnt+=1
         if __out: print cnt
-    
-    if test: 
+
+    if test:
         rospy.loginfo('Activity Graph Data Generated')
         return activity_graphs
     else:
         AG_out_file = os.path.join(data_dir + 'activity_graphs_' + tag + '.p')
-        pickle.dump(activity_graphs, open(AG_out_file,'w')) 
+        pickle.dump(activity_graphs, open(AG_out_file,'w'))
         rospy.loginfo('Activity Graph Data Generated and saved to:\n' + AG_out_file)
     print "Done. Took %f seconds." % (time.time()-t0)
     return
@@ -71,7 +71,7 @@ def graph_check(gr, ep_file):
     """
     gr2 = gr[ep_file].valid_graphlets
     for cnt_, i in enumerate(gr2[gr2.keys()[0]].values()):
-        i.graph2dot('/tmp/graphlet.dot', False) 
+        i.graph2dot('/tmp/graphlet.dot', False)
         cmd = 'dot -Tpng /tmp/graphlet.dot -o /tmp/graphlet_%s.png' % cnt_
         os.system(cmd)
     """
@@ -81,11 +81,11 @@ def generate_feature_space(data_dir, tag, __out=False):
     t0 = time.time()
     AG_out_file = os.path.join(data_dir + 'activity_graphs_' + tag + '.p')
     activity_graphs = pickle.load(open(AG_out_file))
-    
+
     rospy.loginfo('Generating codebook')
     code_book, graphlet_book = [], []
     code_book_set, graphlet_book_set = set([]), set([])
-    for episodes_file in activity_graphs: 
+    for episodes_file in activity_graphs:
 
         #for window in activity_graphs[episodes_file].graphlet_hash_cnts:     #Loop through windows, if multiple windows
         window = activity_graphs[episodes_file].graphlet_hash_cnts.keys()[0]
@@ -95,10 +95,10 @@ def generate_feature_space(data_dir, tag, __out=False):
                 code_book_set.add(ghash)
                 graphlet_book_set.add(activity_graphs[episodes_file].valid_graphlets[window][ghash])
     code_book.extend(code_book_set)
-    graphlet_book.extend(graphlet_book_set)   
+    graphlet_book.extend(graphlet_book_set)
 
     print "len of code book: " + repr(len(code_book))
-    if len(code_book) != len(graphlet_book): 
+    if len(code_book) != len(graphlet_book):
         print "BOOK OF HASHES DOES NOT EQUAL BOOK OF ACTIVITY GRAPHS. \n EXITING."
         sys.exit(1)
 
@@ -106,31 +106,26 @@ def generate_feature_space(data_dir, tag, __out=False):
 
     rospy.loginfo('Generating features')
     cnt = 0
-    X_source_U = []
-    X_uuids = []
-    #Histograms are Windowed dictionaries of histograms 
+    X_source = {}
+    #Histograms are Windowed dictionaries of histograms
     for episodes_file in activity_graphs:
         if __out: print cnt, episodes_file
-        histogram = activity_graphs[episodes_file].get_histogram(code_book)
-        X_source_U.append(histogram)
-        X_uuids.append(episodes_file)
+        X_source[episodes_file] = activity_graphs[episodes_file].get_histogram(code_book)
         cnt+=1
+
         if __out and cnt ==1:
             key = activity_graphs[episodes_file].graphlet_hash_cnts.keys()[0]
             print "KEY = " + repr(key)
             print "hash counts: " + repr(activity_graphs[episodes_file].graphlet_hash_cnts[key].values())
             print "sum of hash counts: " + repr(sum(activity_graphs[episodes_file].graphlet_hash_cnts[key].values()))
             print "sum of histogram: " + repr(sum(histogram))
-    
-    
+
     rospy.loginfo('Generating features FINISHED')
-    rospy.loginfo('Saving all experiment data')       
-    feature_space = (code_book, graphlet_book, X_source_U, X_uuids)
+    rospy.loginfo('Saving all experiment data')
+    feature_space = (code_book, graphlet_book, X_source)
 
     feature_space_out_file = os.path.join(data_dir + 'feature_space_' + tag + '.p')
     pickle.dump(feature_space, open(feature_space_out_file, 'w'))
-    print "\nall graph and histogram data written to: \n" + repr(data_dir) 
+    print "\nall graph and histogram data written to: \n" + repr(data_dir)
     print "Done. Took %f seconds.\n" % (time.time()-t0)
     return feature_space
-
-

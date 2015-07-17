@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 
-"""compute_spatial_relations.py: Computes spatial relations."""
+"""Analyse Episode store using Machine Learning techniques (offline)"""
 
 __author__ = "Paul Duckworth"
 __copyright__ = "Copyright 2015, University of Leeds"
@@ -207,13 +207,9 @@ def run_all(plotting=False, episode_store='relational_episodes'):
         smartThing.pca_graphlets(pca, variable_scores, top)
 
         rospy.loginfo('Good ol k-Means')
-        test_set = False
-        smartThing.kmeans(show_a_test_set=test_set)  # Can pass k, or auto selects min(penalty)
+        smartThing.kmeans()  # Can pass k, or auto selects min(penalty)
+        smartThing.kmeans_cluster_radius()
 
-        #Trajectory Query Service Needs to be running:
-        kmeans_analysis(smartThing.methods["kmeans_cluster_composition"])
-
-        if test_set: smartThing.kmeans_test_cases()
         # *******************************************************************#
         #                    Temporal Analysis                               #
         # *******************************************************************#
@@ -231,9 +227,8 @@ def run_all(plotting=False, episode_store='relational_episodes'):
             smartThing.methods["roi_knowledge"] = 0
             smartThing.methods["roi_temp_list"] = [0] * 24
 
-        # Future: create a msg type and upload everything to Mongodb
-        # Future: Make learning incremental, therefore load, learn, save.
-        smartThing.save(learning_area)
+        smartThing.save(mongodb=True, msg_store="spatial_qsr_models")
+        #smartThing.save(learning_area)
         print "Learnt models for: "
         for key in smartThing.methods:
             print "    ", key

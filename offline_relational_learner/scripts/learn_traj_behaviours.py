@@ -15,11 +15,8 @@ import logging
 import argparse
 import itertools
 import getpass
-
 import numpy as np
-from scipy import spatial
 import cPickle as pickle
-
 from geometry_msgs.msg import Pose, Quaternion
 from human_trajectory.msg import Trajectory, Trajectories
 from soma_trajectory.srv import TrajectoryQuery, TrajectoryQueryRequest, TrajectoryQueryResponse
@@ -181,7 +178,7 @@ def run_all(plotting=False, episode_store='relational_episodes'):
         # **************************************************************#
         rospy.loginfo('Learning on Feature Space')
         params, tag = gh.AG_setup(input_data, date, str_roi)
-        smartThing = Learning(f_space=feature_space, roi=str_roi, vis=True)
+        smartThing = Learning(f_space=feature_space, roi=str(roi), vis=plotting)
 
         rospy.loginfo('Good ol k-Means')
         smartThing.split_data_on_test_set(list_of_test_uuids)
@@ -214,31 +211,17 @@ def run_all(plotting=False, episode_store='relational_episodes'):
             q = ot.query_trajectories(query, True, "direction_red_green")
             raw_input("\npress enter to exit")
 
-        sys.exit(1)
-        
-        # *******************************************************************#
-        #                    Temporal Analysis                               #
-        # *******************************************************************#
-        rospy.loginfo('Learning Temporal Measures')
-        # print "traj times = ", trajectory_times, "\n"
-        smartThing.time_analysis(trajectory_times, plot=plotting)
-        # Future: Save a dictionary of IDs, timestamps and cluster composition for further analysis
-        #smartThing.methods["temporal_list_of_uuids"] = trajectory_times
-
-        # Add the region knowledge to smartThing - Future: make modula.
-        try:
-            smartThing.methods["roi_knowledge"] = roi_knowledge[roi]
-            smartThing.methods["roi_temp_list"] = roi_temp_list[roi]
-        except KeyError:
-            smartThing.methods["roi_knowledge"] = 0
-            smartThing.methods["roi_temp_list"] = [0] * 24
-
-        # Future: create a msg type and upload everything to Mongodb
-        # Future: Make learning incremental, therefore load, learn, save.
-        smartThing.save(learning_area)
+        # **************************************************************#
+        #                    Upload model to Mongo                      #
+        # **************************************************************#
+        smartThing.save(mongodb=True, msg_store="spatial_qsr_models_offline")
+        #smartThing.save(learning_area)  #save to file
         print "Learnt models for: "
         for key in smartThing.methods:
             print "    ", key
+
+
+        something = Learning(load_from_file='mongodb', roi=roi)
 
     print "COMPLETED LEARNING PHASE"
     return
