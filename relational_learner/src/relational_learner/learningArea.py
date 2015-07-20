@@ -75,8 +75,6 @@ class Learning():
             self.roi_temp_know = {}
 
 
-
-
     def save(self, dir=None, mongodb=False, msg_store="spatial_qsr_models"):
 
         if mongodb:
@@ -105,7 +103,6 @@ class Learning():
             with open(filename, "wb") as f:
                 pickle.dump(foo, f)
             print("success")
-
 
     def load(self, filename):
         print("Loading Learning from", filename)
@@ -249,6 +246,7 @@ class Learning():
 
     def kmeans_cluster_radius(self):
         # Analyse the trajectories which belong to each learnt cluster
+
         n_samples, n_features = self.data.shape
         print "sum of inertias = ", self.estimator.inertia_
         #print "CLUSTER CENTERS = ", estimator.cluster_centers_
@@ -264,7 +262,9 @@ class Learning():
                 cluster_composition[label].append(uuid)
                 cluster_radius[label].append(dst)
 
+
         #Calculate the mean distance to the cluster center
+
         means, std = {}, {}
         for label in cluster_radius:
             means[label] = np.mean(cluster_radius[label])
@@ -311,7 +311,6 @@ class Learning():
 
     def kmeans_test_set(self):
         estimator = self.estimator
-
         test_set_distances = []
         novel_uuids, not_novel = [], []
 
