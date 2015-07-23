@@ -51,6 +51,15 @@ def Mongodb_to_list(res):
     return ep_list
 
 
+def query_episodes_using_dates(start, end, db):
+    start_seconds = (start-datetime.datetime(1970,1,1)).total_seconds()
+    end_seconds = (end-datetime.datetime(1970,1,1)).total_seconds()
+    print "\nDate query: %s - %s " % ((start.day, start.month), (end.day, end.month))
+    query = {"start_time": {"$gt": start_seconds, "$lte": end_seconds}}
+    res = db.find(query)
+    print "  query returned: %s episodes." % (res.count())
+    list_of_uuids = [ i['uuid'] for i in res]
+    return list_of_uuids
 
 def run_all(plotting=False, episode_store='relational_episodes'):
 
@@ -64,7 +73,7 @@ def run_all(plotting=False, episode_store='relational_episodes'):
     client = pymongo.MongoClient(
         rospy.get_param("mongodb_host", "localhost"),
         rospy.get_param("mongodb_port", 62345) )
-    db = client.message_store.relational_episodes_test
+    db = client['message_store'][episode_store]
     gs = GeoSpatialStoreProxy('geospatial_store', 'soma')
 
     """
@@ -81,33 +90,51 @@ def run_all(plotting=False, episode_store='relational_episodes'):
     interest_points = dt.plot_polygon(vis=plotting, facecolor='green', alpha=0.4)
     print "interesting points include:\n", interest_points
     dt.markov_chain.display_and_save(layout='nx', view=True, path=trajs)
-
     """
 
     # *******************************************************************#
-    #                 Get a Test Set of Episodes                         #
+    #                 Get Multiple Train/Test Sets                       #
     # *******************************************************************#
     #Use the final week of data as a test set
-    t1 = datetime.datetime(2015, 6, 5, 00, 0, 0, 000000)
-    t2 = datetime.datetime(2015, 6, 12, 00, 0, 0, 000000)
-    start_seconds = (t1-datetime.datetime(1970,1,1)).total_seconds()
-    end_seconds = (t2-datetime.datetime(1970,1,1)).total_seconds()
-    print "TEST SET query: %s - %s " % ((t1.day, t1.month), (t2.day, t2.month))
-    query = {"start_time": {"$gt": start_seconds, "$lte": end_seconds}}
-    res = db.find(query)
-    print "  query returned: %s episodes." % (res.count())
-    list_of_test_uuids = []
-    for i in res:
-        list_of_test_uuids.append(i['uuid'])
+    t1 = datetime.datetime(2015, 4, 26)
+    t2 = datetime.datetime(2015, 5, 9)
+    week0_uuids = query_episodes_using_dates(t1,t2, db)
+
+    t1 = datetime.datetime(2015, 5, 9)
+    t2 = datetime.datetime(2015, 5, 16)
+    week1_uuids = query_episodes_using_dates(t1,t2, db)
+
+    t1 = datetime.datetime(2015, 5, 16)
+    t2 = datetime.datetime(2015, 5, 23)
+    week2_uuids = query_episodes_using_dates(t1,t2, db)
+
+    t1 = datetime.datetime(2015, 5, 23)
+    t2 = datetime.datetime(2015, 5, 30)
+    week3_uuids = query_episodes_using_dates(t1,t2, db)
+
+    t1 = datetime.datetime(2015, 5, 30)
+    t2 = datetime.datetime(2015, 6, 6)
+    week4_uuids = query_episodes_using_dates(t1,t2, db)
+
+    t1 = datetime.datetime(2015, 6, 6)
+    t2 = datetime.datetime(2015, 6, 13)
+    week5_uuids = query_episodes_using_dates(t1,t2, db)
+
+    all = len(week0_uuids)+len(week1_uuids)+len(week2_uuids)+len(week3_uuids)+\
+        len(week4_uuids)+len(week5_uuids)
+    print "%s data queried from %s" % (all, episode_store)
+
 
     # *******************************************************************#
     #                  Obtain Episodes in ROI                            #
     # *******************************************************************#
     rospy.loginfo("0. Running ROI query from message_store")
 
+    region_data_by_week = {}
     for roi in gs.roi_ids(soma_map, soma_config):
         str_roi = "roi_%s" % roi
         if roi != '1': continue
+        region_data_by_week[roi] = {"wk0":[],"wk1":[],"wk2":[],"wk3":[],"wk4":[],"wk5":[]}
 
         print '\nROI: ', gs.type_of_roi(roi, soma_map, soma_config), roi
 
@@ -115,16 +142,34 @@ def run_all(plotting=False, episode_store='relational_episodes'):
         res = db.find(query)
         print "  query returned: %s episodes in region %s." % (res.count(), roi)
 
+        for i in res:
+            if i['uuid'] in week0_uuids: region_data_by_week[roi]["wk0"].append(i['uuid'])
+            elif i['uuid'] in week1_uuids: region_data_by_week[roi]["wk1"].append(i['uuid'])
+            elif i['uuid'] in week2_uuids: region_data_by_week[roi]["wk2"].append(i['uuid'])
+            elif i['uuid'] in week3_uuids: region_data_by_week[roi]["wk3"].append(i['uuid'])
+            elif i['uuid'] in week4_uuids: region_data_by_week[roi]["wk4"].append(i['uuid'])
+            elif i['uuid'] in week5_uuids: region_data_by_week[roi]["wk5"].append(i['uuid'])
+
+        #for k,v in region_data_by_week[roi].items(): print k, len(v)
+        r = region_data_by_week[roi]
+        #keep_sample = set(r["wk1"])^ set(r["wk2"])^ set(r["wk3"])^ set(r["wk4"]) ^ set(r["wk5"])
+        keep_sample = set(r["wk1"]) ^ set(r["wk5"])
+        print "Keeping sample from Week 1 and 5: %s" % len(keep_sample)
+
         all_episodes = {}
         trajectory_times = []
         cnt=0
+        res = db.find(query)
         for cnt, trajectory in enumerate(res):
+            if trajectory["uuid"] not in keep_sample: continue
+
             all_episodes[trajectory["uuid"]] = Mongodb_to_list(trajectory["episodes"])
             cnt+=1
 
         if len(all_episodes) < 12:
             print "Not enough episodes in region %s to learn model." % roi
             continue
+        else: print "%s episodes in region %s." % (len(all_episodes), roi)
 
         # **************************************************************#
         #            Activity Graphs/Code_book/Histograms               #
@@ -151,86 +196,76 @@ def run_all(plotting=False, episode_store='relational_episodes'):
         print "code_book length = ", len(feature_space[0])
         print "number of uuids = ", len(X_source.keys())
 
-        test_list_for_region = set(X_source.keys()) & set(list_of_test_uuids)
+        test_list_for_region = set(X_source.keys()) & set(week5_uuids)
         print "len of test set %s in region: %s" % (len(test_list_for_region), roi)
-
-        # **************************************************************#
-        #                    Create a similarty space                   #
-        # **************************************************************#
-        # rospy.loginfo('Create Similarity Space')
-
-        # similarity_space = get_similarity_space(feature_space)
-        # dictionary_of_similarity = {}
-
-        # for i in similarity_space:
-        #     key = np.sum(i)
-        #     if key in dictionary_of_similarity:
-        #         dictionary_of_similarity[key] += 1
-        #     else:
-        #         dictionary_of_similarity[key] = 1
-
-                ## print "similarty space matches =" #Note: Reducing +ve histogram counts to 1
-                ## for key, cnt in dictionary_of_similarity.items():
-                ## print key, cnt
 
         # **************************************************************#
         #                    Learn a Clustering model                   #
         # **************************************************************#
-        rospy.loginfo('Learning on Feature Space')
+        rospy.loginfo('Learning...')
         params, tag = gh.AG_setup(input_data, date, str_roi)
         smartThing = Learning(f_space=feature_space, roi=str(roi), vis=plotting)
 
+        smartThing.split_data_on_test_set(scale=True, test_set=test_list_for_region)
+
+        # **************************************************************#
+        #                           Learn KMEANS                        #
+        # **************************************************************#
         rospy.loginfo('Good ol k-Means')
-        smartThing.split_data_on_test_set(list_of_test_uuids)
         smartThing.kmeans()
-        smartThing.kmeans_cluster_radius()
-
-        # **************************************************************#
-        #                  TEST CASES - final week                      #
-        # **************************************************************#
-
+        smartThing.cluster_radius(method="kmeans")
         test_set_distances, novelty_info = smartThing.kmeans_test_set()
+        if plotting: visualise_clusters(smartThing, novelty_info)
 
         # **************************************************************#
-        #                     Visualise Clusters                        #
+        #                 Learn a AffinityPropagation                   #
         # **************************************************************#
-        if plotting:
-            for cnt, (label, uuids_list) in enumerate(smartThing.show_in_rviz.items()):
-                query = ot.make_query(uuids_list)
-                q = ot.query_trajectories(query, True, "direction_red_green")
-                if cnt+1 < len(smartThing.show_in_rviz.keys()): raw_input("\npress enter for next cluster")
-                else: raw_input("\npress enter novel Test set")
+        rospy.loginfo('Learning AffinityPropagation')
+        smartThing.tf_idf_cosine_similarity_matrix()
+        smartThing.AffinityPropagation()
+        smartThing.cluster_radius(method="affinityprop")
+        if plotting: visualise_clusters(smartThing)
 
-            #novel_uuids
-            query = ot.make_query(novelty_info[0])
-            q = ot.query_trajectories(query, True, "direction_red_green")
-            raw_input("\npress enter for not novels...")
-
-            #not_novel_uuids
-            query = ot.make_query(novelty_info[1])
-            q = ot.query_trajectories(query, True, "direction_red_green")
-            raw_input("\npress enter to exit")
 
         # **************************************************************#
-        #                    Upload model to Mongo                      #
+        #                    Upload model to MongoDB                    #
         # **************************************************************#
-        smartThing.save(mongodb=True, msg_store="spatial_qsr_models_offline")
+        #smartThing.save(mongodb=True, msg_store="spatial_qsr_models_offline")
         #smartThing.save(learning_area)  #save to file
         print "Learnt models for: "
         for key in smartThing.methods:
             print "    ", key
 
-
-        something = Learning(load_from_file='mongodb', roi=roi)
+        #something = Learning(load_from_file='mongodb', roi=roi)
 
     print "COMPLETED LEARNING PHASE"
     return
 
 
+def visualise_clusters(smartThing, novelty_info=[]):
+    N = max(smartThing.show_in_rviz.keys())
+    print "visualising first cluster: 0"
+    for cnt, (label, uuids_list) in enumerate(smartThing.show_in_rviz.items()):
+        query = ot.make_query(uuids_list)
+        q = ot.query_trajectories(query, True, "direction_red_green")
+        if cnt < N: raw_input("\npress enter for next cluster: %i" % (cnt+1))
+
+    if len(novelty_info)>1 and cnt == N:
+        raw_input("\npress enter for novel trajectories")
+        #novel_uuids
+        query = ot.make_query(novelty_info[0])
+        q = ot.query_trajectories(query, True, "direction_red_green")
+        raw_input("\npress enter for not novels...")
+
+        #not_novel_uuids
+        query = ot.make_query(novelty_info[1])
+        q = ot.query_trajectories(query, True, "direction_red_green")
+        raw_input("\npress enter to exit method")
+
+
 class Offline_Learning(object):
     def learn(self, plotting=True, episode_store='relational_episodes'):
         r = run_all(plotting, episode_store)
-
 
 if __name__ == "__main__":
     rospy.init_node("offline_trajectory_learner")

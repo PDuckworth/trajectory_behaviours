@@ -16,9 +16,11 @@ import matplotlib.pyplot as plt
 from mpl_toolkits.mplot3d import Axes3D
 from sklearn import mixture
 from scipy.spatial import distance
+#from sklearn.metrics import pairwise_distances
 from sklearn import metrics
-from sklearn.cluster import KMeans
-from sklearn.datasets import load_digits
+from sklearn.cluster import KMeans, AffinityPropagation
+from sklearn.feature_extraction.text import TfidfVectorizer
+#from sklearn.cluster import AgglomerativeClustering
 from sklearn.decomposition import PCA
 from sklearn.preprocessing import StandardScaler
 
@@ -53,7 +55,6 @@ class Learning():
 
     def __init__(self, f_space=None, roi="",
                     vis=False, load_from_file=None):
-
 
         if load_from_file is 'mongodb':
             self.roi = roi
@@ -141,7 +142,7 @@ class Learning():
         if cnt != 1:
             self.flag = False
             print("%s objects in this region returned" % cnt)
-        else self.flag = True
+        else: self.flag = True
 
     def pca_investigate_variables(self):
         """
@@ -191,7 +192,6 @@ class Learning():
 
         return pca, variable_scores
 
-
     def pca_graphlets(self, pca, variable_scores, top=0.1):
         """
         visually inspect the most/least disctiminating graphlet features
@@ -203,11 +203,14 @@ class Learning():
         return
 
 
-    def offline_kmeans(self):
-        kmeans_test_set(self.estimator, self.X_test, self.X_test_ids)
+    def split_data_on_test_set(self, scale=False, test_set=None):
+        rospy.loginfo('Split out Test set...')
+        if scale:
+            for k, v in self.feature_space.items():
+                s = np.sum(v)
+                foo = [i/float(s) for i in v]
+                self.feature_space[k] = foo
 
-
-    def split_data_on_test_set(self, test_set=None):
         if test_set is None:
             self.data = np.array(self.feature_space.values())
             self.X_uuids = self.feature_space.keys()
@@ -229,32 +232,38 @@ class Learning():
             (self.estimator, penalty) = self.kmeans_util(k=k)
         else:
             print "Automatically selecting k"
-            min_k = 1
+            min_k = 2
             #for k in xrange(min_k, int(len(data)/5)+1):
             for k in xrange(min_k, int(10)+1):
                 (estimator, penalty) = self.kmeans_util(k)
                 if k==min_k:
                     (best_e, best_p, best_k) = estimator, penalty, k
-                if penalty < best_p:
+                if int(penalty) < int(best_p):
                     (best_e, best_p, best_k) = estimator, penalty, k
             self.estimator, penalty, k = (best_e, best_p, best_k)
             print "k = %d has minimum inertia*penalty" %k
-
         self.methods["kmeans"] = self.estimator
 
-
-
-    def kmeans_cluster_radius(self):
-        # Analyse the trajectories which belong to each learnt cluster
-
+    def cluster_radius(self, method=None):
+        """ Analyse the trajectories which belong to each learnt cluster"""
         n_samples, n_features = self.data.shape
-        print "sum of inertias = ", self.estimator.inertia_
+        #print "sum of inertias = ", self.estimator.inertia_
         #print "CLUSTER CENTERS = ", estimator.cluster_centers_
-        print "datapoint labels = ", self.estimator.labels_
+        #print "datapoint labels = ", self.estimator.labels_
+
+        if method == "affinityprop":
+            estimator = self.methods["affinityprop"]
+        else:
+            estimator = self.methods["kmeans"]
 
         cluster_radius, cluster_composition = {}, {}
-        for uuid, label, sample in zip(self.X_uuids, self.estimator.labels_, self.data):
-            dst = distance.euclidean(sample, self.estimator.cluster_centers_[label])
+        for cnt, (uuid, label, sample) in enumerate(zip(self.X_uuids, \
+                                        estimator.labels_, self.data)):
+            if method == "kmeans":
+                dst = distance.euclidean(sample, estimator.cluster_centers_[label])
+            elif method == "affinityprop":
+                dst = estimator.affinity_matrix_[estimator.cluster_centers_indices_[label]][cnt]
+
             if label not in cluster_composition:
                 cluster_composition[label] = [uuid]
                 cluster_radius[label] = [dst]
@@ -262,9 +271,7 @@ class Learning():
                 cluster_composition[label].append(uuid)
                 cluster_radius[label].append(dst)
 
-
         #Calculate the mean distance to the cluster center
-
         means, std = {}, {}
         for label in cluster_radius:
             means[label] = np.mean(cluster_radius[label])
@@ -273,22 +280,22 @@ class Learning():
         #Keep closest trajectories to cluster center for visualisation
         filtered_composition = {}
         for cluster_label, list_of_uuids in cluster_composition.items():
-            print "Cluster %s has %s datapoints. Mean dst to center = %0.3f with std = %0.3f" \
+            print "Cluster %s has %s datapoints. Mean dst/sim to center = %0.3f with std = %0.3f" \
             % (cluster_label, len(list_of_uuids), means[cluster_label], std[cluster_label])
 
             filtered_composition[cluster_label] = []
             dst_uuid = zip(cluster_radius[cluster_label], list_of_uuids)
             dst_uuid.sort()
             dst_sorted = [uuid for dst, uuid in dst_uuid]
+            #Still works with AP because it stores `cosine distances`
             filtered_composition[cluster_label] = dst_sorted[:30]
 
         if self.visualise: self.show_in_rviz = filtered_composition
         #self.methods["kmeans_composition"] = cluster_composition
         #self.methods["kmeans_composition"] = filtered_composition
-        self.estimator.cluster_dist_means = means
-        self.estimator.cluster_dist_std = std
-        self.methods["kmeans"] = self.estimator
-
+        estimator.cluster_dist_means = means
+        estimator.cluster_dist_std = std
+        self.methods[method] = estimator
 
     def kmeans_util(self, k):
         t0 = time.time()
@@ -296,6 +303,7 @@ class Learning():
         estimator.fit(self.data)
         #penalty = estimator.inertia_*math.sqrt(k)
         penalty = estimator.inertia_*k
+        sil_score = metrics.silhouette_score(self.data, estimator.labels_, metric='sqeuclidean')
 
         if self.visualise:
             n_samples, n_features = self.data.shape
@@ -303,14 +311,17 @@ class Learning():
                   % (n_samples, n_features, k))
             print(40 * '-')
             print('% 9s' % 'init' '         time  inertia   *Penalty')
-            print('"k-means++"   %.2fs    %i     %i'
+            print('"k-means++"   %.2fs    %0.2f     %0.2f'
                     % ((time.time()-t0), estimator.inertia_, penalty))
+
+            print('"Silho Coef"   %.2fs    %0.3f  '
+                    % ((time.time()-t0),  sil_score))
             print(40 * '-')
         return (estimator, penalty)
 
 
     def kmeans_test_set(self):
-        estimator = self.estimator
+        estimator = self.methods["kmeans"]
         test_set_distances = []
         novel_uuids, not_novel = [], []
 
@@ -329,6 +340,53 @@ class Learning():
         print "Inertia of Test Set = %s\n" % sum(test_set_distances)
         return test_set_distances, (novel_uuids, not_novel)
 
+
+    def tf_idf_cosine_similarity_matrix(self):
+        data = self.data
+        (N, f) = data.shape  #Number of documents, and number of features
+        print "nuber of documents = %s, number of features = %s " %(N, f)
+        print data[0]
+
+        idf_scores=[]
+        feature_freq = (data != 0).sum(0)  #document_frequency
+        #len_of_histograms = data.sum(1)
+
+        for cnt, i in enumerate(feature_freq):
+            idf_scores.append(math.log((N /float(i)))) if i>0 else idf_scores.append(0)
+        print "feature frequency: %s" %feature_freq
+
+        tf_idf_scores = []
+        for histogram in data:
+            foo = []
+            for cnt, i in enumerate(histogram):
+                bar = 1+math.log(i) if i>0 else 0
+                foo.append(bar*idf_scores[cnt])
+                #foo.append(1+math.log(i)) if i>0 else foo.append(0)
+            tf_idf_scores.append(foo)
+
+        tf_idf_scores = np.array(tf_idf_scores)
+
+        #Length normalise the vectors to lie on the unit hypersphere
+        #norms = np.linalg.norm(tf_idf_scores, axis=1)
+        #len_normed_tf_idf = [tf_idf_scores[i] / float(c[i]) for i in xrange(len(norms))]
+
+        #Calculates the 'cosine distance' which is 1-cosine similarities
+        self.sim_matrix = metrics.pairwise_distances(tf_idf_scores, metric='cosine', n_jobs=4)
+        #self.sim_matrix = metrics.pairwise.cosine_distances(tf_idf_scores)
+
+
+    def AffinityPropagation(self):
+        self.data = self.sim_matrix
+
+        estimator = AffinityPropagation(affinity='precomputed').fit(self.data)
+        n_clusters_ = len(estimator.cluster_centers_indices_)
+        print('Estimated number of clusters: %d' % n_clusters_)
+        print("Silhouette Coefficient: %0.3f"
+              % metrics.silhouette_score(self.data, estimator.labels_, metric='sqeuclidean'))
+
+        foo = [self.data[i] for i in estimator.cluster_centers_indices_]
+        estimator.cluster_centers_ = foo
+        self.methods["affinityprop"] = estimator
 
     def time_analysis(self, time_points, plot=False, interval=1800):
         """Number of seconds in a day = 86400"""
@@ -512,32 +570,6 @@ def robot_view_cone( Px, Py, yaw):
     Rx = Px + d * (math.cos((yaw+alpha)/2))
     Ry = Py + d * (math.cos((yaw+alpha)/2))
     return [ [Lx, Ly], [Rx, Ry], [Px, Py] ]
-
-
-def get_similarity_space(feature_space):
-    "Encode a similarity space from the histogram of graphlets"
-    (code_book, graphlet_book, X_source_U) = feature_space
-
-    print "Feature space length = %s. Width = %s" %(len(X_source_U), len(X_source_U[0]))
-
-    A = np.matrix(X_source_U)
-    #Test: Set all positive counts to 1.
-    A[A>1] = 1
-
-    size = np.shape(A)[0]
-    sim = np.zeros((size, size))
-
-    for row in xrange((np.shape(A)[0]/2)+1):
-        B = np.roll(A, -row, axis=0)
-
-        for comparison_row, comparison_col in enumerate(A==B):
-            if comparison_col.all() == True:
-            #if np.sum(comparison_col) >= np.shape(A)[1]:
-                col =(comparison_row + row) % size
-                sim[col][comparison_row] = 1
-                sim[comparison_row][col] = 1
-
-    return sim
 
 
 def plot_pca(data, k):
