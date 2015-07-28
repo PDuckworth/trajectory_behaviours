@@ -14,8 +14,9 @@ import numpy as np
 import pymongo
 import matplotlib.pyplot as plt
 from mpl_toolkits.mplot3d import Axes3D
+
 from sklearn import mixture
-from scipy.spatial import distance
+from scipy.spatial.distance import pdist, cdist, euclidean
 #from sklearn.metrics import pairwise_distances
 from sklearn import metrics
 from sklearn.cluster import KMeans, AffinityPropagation
@@ -24,15 +25,14 @@ from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.decomposition import PCA
 from sklearn.preprocessing import StandardScaler
 
-from soma_geospatial_store.geospatial_store import *
 from tf.transformations import euler_from_quaternion
-
-from relational_learner.Activity_Graph import Activity_Graph
-from time_analysis.cyclic_processes import *
+from mongodb_store.message_store import MessageStoreProxy
+from soma_geospatial_store.geospatial_store import *
 
 from relational_learner.msg import *
+from relational_learner.Activity_Graph import Activity_Graph
+from time_analysis.cyclic_processes import *
 from human_trajectory.msg import Trajectories
-from mongodb_store.message_store import MessageStoreProxy
 
 class RegionKnowledgeImporter(object):
     def __init__(self):
@@ -228,21 +228,49 @@ class Learning():
 
 
     def kmeans(self, k=None):
-        if k!=None:
-            (self.estimator, penalty) = self.kmeans_util(k=k)
+        n_samples, n_features = self.data.shape
+        # determine your range of K
+        if k == None:
+            k_range = range(2,50)
         else:
-            print "Automatically selecting k"
-            min_k = 2
-            #for k in xrange(min_k, int(len(data)/5)+1):
-            for k in xrange(min_k, int(10)+1):
-                (estimator, penalty) = self.kmeans_util(k)
-                if k==min_k:
-                    (best_e, best_p, best_k) = estimator, penalty, k
-                if int(penalty) < int(best_p):
-                    (best_e, best_p, best_k) = estimator, penalty, k
-            self.estimator, penalty, k = (best_e, best_p, best_k)
-            print "k = %d has minimum inertia*penalty" %k
-        self.methods["kmeans"] = self.estimator
+            k_range = [k]
+
+        # Fit the kmeans model for each n_clusters = k
+        k_means_var = [KMeans(n_clusters=k, init='k-means++').fit(self.data) for k in k_range]
+        # Pull out the cluster centeres for each model
+        centroids = [X.cluster_centers_ for X in k_means_var]
+
+        # Total within-cluster sum of squares (variance or inertia)
+        inertia_ = [X.inertia_ for X in k_means_var]
+        #print inertia_
+
+        # silhouette scores of each model
+        sil_scores = [metrics.silhouette_score(self.data, X.labels_, metric='sqeuclidean')
+                for X in k_means_var]
+
+        # Calculate the Euclidean distance from each point to each cluster center
+        k_euclid = [cdist(self.data, cent, 'euclidean') for cent in centroids]
+        dist = [np.min(ke, axis=1) for ke in k_euclid]
+
+        # Keep the index of which cluster is clostest to each example
+        cluster_comp = [np.argmin(ke, axis=1) for ke in k_euclid]
+
+        # The total sum of squares
+        tss = sum(pdist(self.data)**2 / n_samples)
+        #print "The total sum of squares: %0.3f" % tss
+        # Total within-cluster sum of squares (variance)
+        wcss = [sum(d**2) for d in dist]
+        # The between-cluster sum of squares
+        print "Between-cluster sum of squares: %s" % (tss - wcss)
+        print "Percentage of Variance explained by clustering: \n%s" % (((tss - wcss)/ tss)*100)
+
+        print "\nRegion: %s" % self.roi
+        for cnt, i in enumerate(inertia_):
+            print "k: %s. inertia: %0.2f. Penalty: %0.2f. silhouette: %0.3f." \
+                % (k_range[cnt], i, i*k_range[cnt], sil_scores[cnt])
+
+        self.methods["kmeans"] = k_means_var[np.argmax(sil_scores)]
+        print "k = %d has minimum silhouette score" % (len(self.methods["kmeans"].cluster_centers_))
 
     def cluster_radius(self, method=None):
         """ Analyse the trajectories which belong to each learnt cluster"""
@@ -260,7 +288,7 @@ class Learning():
         for cnt, (uuid, label, sample) in enumerate(zip(self.X_uuids, \
                                         estimator.labels_, self.data)):
             if method == "kmeans":
-                dst = distance.euclidean(sample, estimator.cluster_centers_[label])
+                dst = euclidean(sample, estimator.cluster_centers_[label])
             elif method == "affinityprop":
                 dst = estimator.affinity_matrix_[estimator.cluster_centers_indices_[label]][cnt]
 
@@ -297,33 +325,14 @@ class Learning():
         estimator.cluster_dist_std = std
         self.methods[method] = estimator
 
-    def kmeans_util(self, k):
-        t0 = time.time()
-        estimator = KMeans(init='k-means++', n_clusters=k, n_init=10)
-        estimator.fit(self.data)
-        #penalty = estimator.inertia_*math.sqrt(k)
-        penalty = estimator.inertia_*k
-        sil_score = metrics.silhouette_score(self.data, estimator.labels_, metric='sqeuclidean')
 
-        if self.visualise:
-            n_samples, n_features = self.data.shape
-            print("n_samples %d, \t n_features %d, \t n_clusters %d"
-                  % (n_samples, n_features, k))
-            print(40 * '-')
-            print('% 9s' % 'init' '         time  inertia   *Penalty')
-            print('"k-means++"   %.2fs    %0.2f     %0.2f'
-                    % ((time.time()-t0), estimator.inertia_, penalty))
-
-            print('"Silho Coef"   %.2fs    %0.3f  '
-                    % ((time.time()-t0),  sil_score))
-            print(40 * '-')
-        return (estimator, penalty)
-
-
-    def kmeans_test_set(self):
+    def kmeans_test_set(self, iter):
+        """Test a bunch of histograms against the learnt Kmeans model learnt"""
         estimator = self.methods["kmeans"]
         test_set_distances = []
         novel_uuids, not_novel = [], []
+
+        if iter: self.k_means_iterate_over_examples(estimator)
 
         for uuid, test_histogram in self.X_test.items():
             closest_cluster_id = estimator.predict(test_histogram)
@@ -340,6 +349,60 @@ class Learning():
         print "Inertia of Test Set = %s\n" % sum(test_set_distances)
         return test_set_distances, (novel_uuids, not_novel)
 
+
+    def k_means_iterate_over_examples(self, estimator):
+        collect_seq_histograms = {}
+        graph_dict = {}
+        t = time.time()
+        for code, graph in zip(self.code_book, self.graphlet_book):
+            graph_dict[code] = graph
+        print "time to create graph dic: ", time.time() - t
+
+        for uuid_seq_string, histogram in self.X_test.items():
+            if "_test_seq_" not in uuid_seq_string: continue
+            uuid, seq = uuid_seq_string.split('_')[0], uuid_seq_string.split('_')[3]
+
+            if uuid not in collect_seq_histograms: collect_seq_histograms[uuid] = {}
+            collect_seq_histograms[uuid][seq] = histogram
+
+        for uuid, sequence_preds in collect_seq_histograms.items():
+            print uuid
+            predicted_codes = {}
+            for seq in xrange(1, len(sequence_preds)+1):
+                predicted_codes[seq]=set([])
+
+                hist = np.array(sequence_preds[str(seq)])
+                cluster_id = estimator.predict(hist)
+                predicted_cluster = estimator.cluster_centers_[cluster_id][0]
+                #print cluster_id, predicted_cluster
+
+                for i, weight in enumerate(predicted_cluster):
+                    if weight != 0: predicted_codes[seq].add(self.code_book[i])
+
+            actual=set([])
+            for i, weight in enumerate(hist):
+                if weight != 0: actual.add(self.code_book[i])
+
+            for seq, codes in predicted_codes.items():
+                print "seq %s: predicted codes:" % seq, codes
+                matches = codes & actual
+                print "percentage match = ", len(matches) / float(len(codes) + len(actual))
+
+                for i in matches:  print graph_dict[i].graph
+
+            #print "seq 7 actual hist:", actual
+            sys.exit(1)
+
+
+            for i, feature in enumerate(sequence_preds[str(seq)]):
+                print i
+                if feature > 0:
+                    print self.code_book[i]
+                    print self.graphlet_book[i]
+
+
+
+        sys.exit(1)
 
     def tf_idf_cosine_similarity_matrix(self):
         data = self.data
@@ -437,6 +500,20 @@ class Learning():
         plt.legend()
         filename='/tmp/temporal_plot_%s.jpg' % self.roi
         plt.savefig(filename, bbox_inches='tight', dpi=100)
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 

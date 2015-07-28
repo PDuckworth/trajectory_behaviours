@@ -76,7 +76,7 @@ class OfflineEpisodes(object):
         self.request = 1.0
         self.msg_store = msg_store
         self.timestamps = {}
-
+        self.uuids=[]
 
     def learn_threshold_from_first_days(self, t1):
 
@@ -154,8 +154,8 @@ class OfflineEpisodes(object):
 
             if self.vis: print log['displacement_pose_ratio'], self.filter_threshold
             test1 = log['displacement_pose_ratio'] < self.filter_threshold
-            test2 = log['trajectory_displacement'] < 0.4 #distance threshold
-
+            test2 = log['trajectory_displacement'] < 1.0 #F1 distance threshold
+            #test2 = log['trajectory_displacement'] < 0.4 #F2 distance threshold
 
             if test1 or test2:  #learnt ratio threshold
                 self.removed_ids.append(log['uuid'])
@@ -238,9 +238,8 @@ if __name__ == "__main__":
         st = time.time()
 
         #Already learnt GMM with 1 mean from day 1 data :)
-        #Learnt = 0.01
-        #Possibly better would be 0.03 - but not enough data :S
-        oe.filter_threshold = 0.005
+        oe.filter_threshold =  0.01 #F1
+        #oe.filter_threshold = 0.005 #F2
 
         oe._retrieve_trajectories(date_query)
         oe._construct_from_people_trajectory()

@@ -27,7 +27,7 @@ class EpisodeClient(object):
 
     def episode_client(self, Trajectory):
         rospy.wait_for_service('/episode_service')
-        proxy = rospy.ServiceProxy('/episode_service', EpisodeService)  
+        proxy = rospy.ServiceProxy('/episode_service', EpisodeService)
         req = EpisodeServiceRequest(Trajectory, self.vis, self.current_uuids_detected, \
                                     "relational_episodes")
         ret = proxy(req)
@@ -38,17 +38,18 @@ if __name__ == "__main__":
     rospy.init_node('episodes_client')
 
     ec = EpisodeClient()
-    #query ='''{"uuid": {"$exists" : "True"}}'''
-
-    data_dir = '/home/strands/STRANDS/'
-    list_of_uuids = pickle.load(open(data_dir + 'trajectory_dump/filtered_on_disp_roi_1_end1.p', "r"))
+    query ='''{"uuid": {"$exists" : "True"}}'''
+    list_of_uuids = ['5bf8898c-e230-55f5-b902-7d97a90b4a7b']
+    #data_dir = '/home/strands/STRANDS/'
+    #list_of_uuids = pickle.load(open(data_dir + 'trajectory_dump/filtered_on_disp_roi_1_end1.p', "r"))
 
     query = ot.make_query(list_of_uuids)
-    q = ot.query_trajectories(query)
-    q.get_poses()
-
+    q = ot.query_trajectories(query, True)
+    raw_input("egeg")
+    #q.get_poses()
+    #sys.exit(1)
     ec.current_uuids_detected = list_of_uuids
-    
+
     for cnt, trajectory in enumerate(q.res.trajectories.trajectories):
         print cnt, trajectory.uuid
         ret = ec.episode_client(trajectory)
@@ -60,27 +61,3 @@ if __name__ == "__main__":
         else:
             print "uuid = %s is outside of all soma roi" % trajectory.uuid
         """
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-

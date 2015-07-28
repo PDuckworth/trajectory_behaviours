@@ -190,7 +190,8 @@ def handle_episodes(req):
                     episodes=get_episode_msg(ep.all_episodes[episodes_file]))
 
     #MongoDB Query - to see whether to insert new document, or update an existing doc.
-    query = {"uuid" : str(uuid)}
+    query = {"uuid" : str(uuid),
+             "qsr_type": qsr_reader.qsr}
     i = Importer()
     i._store_client = MessageStoreProxy(collection=req.message_store_name)
     p_id = i._store_client.update(message=msg, message_query=query, meta=meta, upsert=True)

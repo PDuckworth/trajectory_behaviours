@@ -162,12 +162,12 @@ class QueryClient():
         self.ser = rospy.ServiceProxy(service_name, TrajectoryQuery)
 
     def query(self, query, vis = False, vis_option = "random"):
+        print "visualise colour option:", vis_option
         try:
             req = TrajectoryQueryRequest()
             req.query = query
             req.visualize = vis
             req.vis_option = vis_option
-            print req.vis_option
             res = self.ser(req)
             return res
         except rospy.ServiceException, e:
@@ -180,6 +180,7 @@ class query_trajectories():
         vis_option = colour
         self.res = client.query(query, vis, vis_option)
         self.uuids_list = []
+        self.sequence_id_dict = {}
         for trajectory in self.res.trajectories.trajectories:
             self.uuids_list.append(trajectory.uuid)
 
@@ -232,6 +233,7 @@ class query_trajectories():
         self.trajectory_times = []
 
         for trajectory in self.res.trajectories.trajectories:
+            self.sequence_id_dict[trajectory.uuid] = trajectory.sequence_id
             self.trajs[trajectory.uuid] = []
             self.trajectory_times.append(trajectory.start_time.secs) # Temporal Info
             for entry in trajectory.trajectory:
