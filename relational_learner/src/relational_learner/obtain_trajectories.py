@@ -34,15 +34,16 @@ from soma_geospatial_store.geospatial_store import GeoSpatialStoreProxy
 #**************************************************************#
 class query_objects():
 
-    def __init__(self):
+    def __init__(self, query=None):
         self.all_objects = dict()
         host = rospy.get_param("mongodb_host")
         port = rospy.get_param("mongodb_port")
         self._client = pymongo.MongoClient(host, port)
-        self._retrieve_logs()
+        self._retrieve_logs(query)
 
-    def _retrieve_logs(self):
-        logs = self._client.message_store.soma.find()
+    def _retrieve_logs(self, query=None):
+        print query
+        logs = self._client.message_store.soma.find(query)
 
         for log in logs:
             for i, _id in enumerate(log['id']):

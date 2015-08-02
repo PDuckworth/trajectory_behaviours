@@ -46,6 +46,7 @@ if __name__ == "__main__":
     query = ot.make_query(list_of_uuids)
     q = ot.query_trajectories(query, True)
     raw_input("egeg")
+    
     #q.get_poses()
     #sys.exit(1)
     ec.current_uuids_detected = list_of_uuids

@@ -231,7 +231,7 @@ class Learning():
         n_samples, n_features = self.data.shape
         # determine your range of K
         if k == None:
-            k_range = range(2,50)
+            k_range = range(2,20)
         else:
             k_range = [k]
 
@@ -332,6 +332,7 @@ class Learning():
         test_set_distances = []
         novel_uuids, not_novel = [], []
 
+        #Iterate over the split-trajectories. To predict future qualitative movements
         if iter: self.k_means_iterate_over_examples(estimator)
 
         for uuid, test_histogram in self.X_test.items():
@@ -358,12 +359,28 @@ class Learning():
             graph_dict[code] = graph
         print "time to create graph dic: ", time.time() - t
 
+        graphlets_for_cluster_centers = {}
+        for cnt, clst in enumerate(estimator.cluster_centers_):
+            graphlets_for_cluster_centers[str(cnt)] = []
+            for index, i in enumerate(clst > 0.01):
+                if i:
+                    #print self.code_book[index]
+                    #print self.graphlet_book[index].graph
+                    graphlets_for_cluster_centers[str(cnt)].append(self.graphlet_book[index])
+        pickle.dump(graphlets_for_cluster_centers, open('/home/strands/STRANDS/TESTING/cluster_AGs.p', "w"))
+
+
         for uuid_seq_string, histogram in self.X_test.items():
             if "_test_seq_" not in uuid_seq_string: continue
             uuid, seq = uuid_seq_string.split('_')[0], uuid_seq_string.split('_')[3]
 
             if uuid not in collect_seq_histograms: collect_seq_histograms[uuid] = {}
             collect_seq_histograms[uuid][seq] = histogram
+
+        """DO THIS ONE SUBJECT AT A TIME?"""
+
+        """ALSO - DONT NEED TO KEEP ALL PREDICTED CODES - JUST THE PRED CLUSTER
+        AND A DICT OF CLUSTER_ID:CODES. AND QSR MASKS TO APPLY TO RVIZ (occupancygrid)"""
 
         for uuid, sequence_preds in collect_seq_histograms.items():
             print uuid
@@ -374,23 +391,26 @@ class Learning():
                 hist = np.array(sequence_preds[str(seq)])
                 cluster_id = estimator.predict(hist)
                 predicted_cluster = estimator.cluster_centers_[cluster_id][0]
-                #print cluster_id, predicted_cluster
+                print cluster_id, predicted_cluster
 
+                raw_input("HERE")
                 for i, weight in enumerate(predicted_cluster):
                     if weight != 0: predicted_codes[seq].add(self.code_book[i])
 
             actual=set([])
+            #Compare against the graphlets in the complete trajectory (the final seq_id)
             for i, weight in enumerate(hist):
                 if weight != 0: actual.add(self.code_book[i])
 
+            avg_p = 0
             for seq, codes in predicted_codes.items():
                 print "seq %s: predicted codes:" % seq, codes
                 matches = codes & actual
-                print "percentage match = ", len(matches) / float(len(codes) + len(actual))
-
-                for i in matches:  print graph_dict[i].graph
-
-            #print "seq 7 actual hist:", actual
+                p = len(matches) / float(len(codes) + len(actual))
+                print "percentage match = %0.2f" % (p*100)
+                avg_p += p
+                #for i in matches:  print graph_dict[i].graph
+            print "average percentage match for uuid: %s = %0.2f" % (uuid, (avg_p/float(seq)*100))
             sys.exit(1)
 
 

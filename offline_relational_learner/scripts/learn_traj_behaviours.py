@@ -220,17 +220,8 @@ def run_all(plotting, episode_store, learn_methods, qsr_type):
         smartThing = Learning(f_space=feature_space, roi=str(roi), vis=plotting)
 
         smartThing.split_data_on_test_set(scale=True, test_set=list(region_test_set))
-
-        """
-        reduced_test={}
-        reduced_keys = smartThing.X_test.keys()[0:5]
-        for i in reduced_keys:
-            reduced_test[i] = smartThing.X_test[i]
-        print len(reduced_test)
-
-        pickle.dump(reduced_test, open('/home/strands/TESTING/reduced_test_uuids.p', "w"))
-        sys.exit(1)
-        """
+        # To create the split-trajectories (by seq) used for the trajectory predictions
+        #pickle.dump(list(region_test_set), open('/home/strands/STRANDS/TESTING/roi_1_week5_uuids.p', "w"))
 
         # **************************************************************#
         #                           Learn KMEANS                        #

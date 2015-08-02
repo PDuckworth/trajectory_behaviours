@@ -22,7 +22,7 @@ def get_mini_batch_trajs(X_test, vis=False):
 
     """
     ## This method returns the split trajectories not as trajectory message types
-    query = ot.make_query(X_test.keys())
+    query = ot.make_query(X_test)
     q = ot.query_trajectories(str(query), bool(vis), "direction_red_green")
     q.get_poses()
 
@@ -37,7 +37,7 @@ def get_mini_batch_trajs(X_test, vis=False):
     """
 
     rospy.loginfo('Ferdi\'s method')
-    query = {"uuid" :{ "$in" : X_test.keys()} }
+    query = {"uuid" :{ "$in" : X_test} }
     test_set = OfflineTrajectories(query, size=3000)
 
     batched_test_set = {}
@@ -64,12 +64,13 @@ def get_mini_batch_trajs(X_test, vis=False):
 
 def get_episodes_for_mini_batches(mini_batches):
 
-    OE = OfflineEpisodes(msg_store='relational_episodes_f1_test')
+    OE = OfflineEpisodes(msg_store='episodes_f1_qtcb_and_dist_seq_test')
 
     for uuid, list_of_trajs in mini_batches.items():
         for cnt, traj in enumerate(list_of_trajs):
             print "\n", cnt, traj.uuid, traj.sequence_id, len(list_of_trajs)
-            if cnt+1 == len(list_of_trajs): traj.sequence_id = 7
+
+            if cnt+1 == len(list_of_trajs): traj.sequence_id = len(list_of_trajs)
             traj.uuid = traj.uuid + "_test_seq_"+repr(traj.sequence_id)
             print traj.uuid
             ret = OE._episode_client(uuid, traj)
@@ -79,14 +80,18 @@ if __name__ == "__main__":
     rospy.init_node('splitting_trajectories')
     plotting=True
     data_dir = '/home/strands/STRANDS/'
-    file_ = os.path.join(data_dir + 'TESTING/reduced_test_uuids.p')
+    file_ = os.path.join(data_dir + 'TESTING/roi_1_week5_uuids.p')
     print file_
-    reduced_test = pickle.load(open(file_, "r"))
+    test_set = pickle.load(open(file_, "r"))
 
-    dict_of_mini_batches = get_mini_batch_trajs(reduced_test, vis=plotting)
+    dict_of_mini_batches = get_mini_batch_trajs(test_set, vis=plotting)
     #print "RETURNS:", dict_of_mini_batches[reduced_test.keys()[0]]
 
     test_set = get_episodes_for_mini_batches(dict_of_mini_batches)
 
+    cnt=0
+    for k,v in dict_of_mini_batches.items():
+        cnt+=len(v)
+    print "There should be %s records in database with _test_seq_ in the UUID" % cnt
 
     #(load_from_file=file_)
