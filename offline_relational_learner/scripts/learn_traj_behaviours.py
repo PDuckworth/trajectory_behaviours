@@ -30,6 +30,7 @@ import relational_learner.graphs_handler as gh
 from relational_learner.learningArea import *
 from split_trajectory_test_set import *
 
+from offline_kmeans_testing import *
 
 
 def Mongodb_to_list(res):
@@ -63,7 +64,7 @@ def query_episodes_using_dates(start, end, db):
     list_of_uuids = [ i['uuid'] for i in res]
     return list_of_uuids
 
-def run_all(plotting, episode_store, learn_methods, qsr_type):
+def run_all(plotting, episode_store, learn_methods, qsr_type, publishers):
 
     # *******************************************************************#
     #               Set up Directories and msg stores                    #
@@ -157,8 +158,8 @@ def run_all(plotting, episode_store, learn_methods, qsr_type):
 
         #for k,v in region_data_by_week[roi].items(): print k, len(v)
         r = region_data_by_week[roi]
-        keep_sample = set(r["wk1"])^ set(r["wk2"])^ set(r["wk3"])^ set(r["wk4"]) ^ set(r["wk5"])
-        #keep_sample = set(r["wk1"]) ^ set(r["wk5"])
+        #keep_sample = set(r["wk1"])^ set(r["wk2"])^ set(r["wk3"])^ set(r["wk4"]) ^ set(r["wk5"])
+        keep_sample = set(r["wk1"]) ^ set(r["wk5"])
         print "Keeping sample from Week 1 and 5: %s" % len(keep_sample)
 
         all_episodes = {}
@@ -232,7 +233,9 @@ def run_all(plotting, episode_store, learn_methods, qsr_type):
             smartThing.cluster_radius(method="kmeans")
 
             rospy.loginfo('Testing k-Means')
-            test_set_distances, novelty_info = smartThing.kmeans_test_set(iter = True)
+            smartThing.save(learning_area)
+
+            test_set_distances, novelty_info = kmeans_test_set(smartThing, iter = True, publish=publishers)
 
             if plotting: visualise_clusters(smartThing, novelty_info)
 
@@ -284,12 +287,10 @@ def visualise_clusters(smartThing, novelty_info=[]):
 
 
 class Offline_Learning(object):
-    def learn(self, plotting, episode_store, learn_methods, qsr_type):
-        r = run_all(plotting, episode_store, learn_methods, qsr_type)
+    def learn(self, plotting, episode_store, learn_methods, qsr_type, publishers):
+        r = run_all(plotting, episode_store, learn_methods, qsr_type, publishers)
 
 if __name__ == "__main__":
-    rospy.init_node("offline_trajectory_learner")
-
     parser = argparse.ArgumentParser(description="Unsupervised Learning on relational qsr epiosdes")
     parser.add_argument("-p", "--plotting", help="plotting", default=0)
     parser.add_argument("-e", "--episode_store", help="enter a mongo store of episodes", default='relational_episodes')
@@ -302,5 +303,11 @@ if __name__ == "__main__":
     print "learning methods = ", args.learn_methods
     print "qsr type = ", args.qsr_type
 
+
+    pub_g = rospy.Publisher('/trajectory_behaviours/grid', GridCells, latch=True, queue_size=0)
+    pub_o = rospy.Publisher('/trajectory_behaviours/occu', OccupancyGrid, latch=True, queue_size=0)
+    publishers = (pub_g, pub_o)
+    rospy.init_node("offline_trajectory_learner")
+
     o = Offline_Learning()
-    o.learn(args.plotting, args.episode_store, args.learn_methods, args.qsr_type)
+    o.learn(args.plotting, args.episode_store, args.learn_methods, args.qsr_type, publishers)

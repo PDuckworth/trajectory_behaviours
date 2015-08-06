@@ -26,13 +26,20 @@ def get_objects_from_soma(soma_map, soma_config):
 #1. Remove a smaller mask from the center of a mask  - to make QSR masks
 #2. Add a mask into  a larger mask as a certain position (pos)  -  to apply QSR masks
 
-def addAtPos(mat1, mat2, xycoor, add=True, vis=False, first=False):
+def addAtPos(mat1, mat2, xycoor, use_weight=None, add=True, vis=False, first=False):
     """ - mat1  : matrix to be added to
-        - mat2  : add this matrix to mat1 """
+        - mat2  : add this matrix to mat1
+        - use_weight : scale mat2 by a weight <1
+        - add : use if two arrays are to be added to a position
+        - first : use this, only if you are removing small binary masks from larger binary masks"""
 
     if vis:
         print "mat shape", np.shape(mat1)
         print "mask shape", np.shape(mat2)
+
+    #Apply a weight to mat2 to scale it (away) from a binary mask
+    if use_weight != None: mat2 =  mat2*use_weight
+
     size_x, size_y = np.shape(mat2)
     big_x, big_y = np.shape(mat1)
 
@@ -79,7 +86,7 @@ def addAtPos(mat1, mat2, xycoor, add=True, vis=False, first=False):
         if vis: print "c"
         pop_rows = abs(c)
         c += pop_rows
-        print pop_rows, c
+        if vis: print pop_rows, c
         mat2 = mat2[:,pop_rows:]
 
     if d > mat1.shape[1]:

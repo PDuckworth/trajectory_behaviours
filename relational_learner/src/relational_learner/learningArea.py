@@ -74,7 +74,7 @@ class Learning():
             self.roi_knowledge = {}
             self.roi_temp_list = {}
             self.roi_temp_know = {}
-
+            self.X_test = {}
 
     def save(self, dir=None, mongodb=False, msg_store="spatial_qsr_models"):
 
@@ -99,7 +99,9 @@ class Learning():
 
             foo = { "ROI": self.roi, "feature_space": self.feature_space, \
                     "code_book": self.code_book, "graphlet_book": self.graphlet_book, \
-                    "learning_methods": self.methods}
+                    "learning_methods": self.methods, \
+                    "X_test": self.X_test, "show_clstrs_in_rviz": self.show_in_rviz}
+
             print(filename)
             with open(filename, "wb") as f:
                 pickle.dump(foo, f)
@@ -107,6 +109,10 @@ class Learning():
 
     def load(self, filename):
         print("Loading Learning from", filename)
+
+        if filename== "mongo":
+            print "Not implemented loading from mongo."
+            sys.exit(1)
 
         try:
             with open(filename, "rb") as f:
@@ -116,6 +122,8 @@ class Learning():
             self.code_book = foo["code_book"]
             self.graphlet_book = foo["graphlet_book"]
             self.feature_space = foo["feature_space"]
+            self.X_test = foo["X_test"]
+            self.show_in_rviz = foo["show_clstrs_in_rviz"]
             self.flag = True
             print "Loaded: " + repr(self.methods.keys())
             print("success")
@@ -215,7 +223,6 @@ class Learning():
             self.data = np.array(self.feature_space.values())
             self.X_uuids = self.feature_space.keys()
         else:
-            self.X_test={}
             self.X_uuids, data_ = [], []
 
             for uuid, feature_vec in self.feature_space.items():
@@ -231,7 +238,7 @@ class Learning():
         n_samples, n_features = self.data.shape
         # determine your range of K
         if k == None:
-            k_range = range(2,20)
+            k_range = range(5,20)
         else:
             k_range = [k]
 
@@ -270,7 +277,7 @@ class Learning():
                 % (k_range[cnt], i, i*k_range[cnt], sil_scores[cnt])
 
         self.methods["kmeans"] = k_means_var[np.argmax(sil_scores)]
-        print "k = %d has minimum silhouette score" % (len(self.methods["kmeans"].cluster_centers_))
+        print "k = %d has maximum silhouette score" % (len(self.methods["kmeans"].cluster_centers_))
 
     def cluster_radius(self, method=None):
         """ Analyse the trajectories which belong to each learnt cluster"""
@@ -292,6 +299,7 @@ class Learning():
             elif method == "affinityprop":
                 dst = estimator.affinity_matrix_[estimator.cluster_centers_indices_[label]][cnt]
 
+            label = str(label)
             if label not in cluster_composition:
                 cluster_composition[label] = [uuid]
                 cluster_radius[label] = [dst]
@@ -311,118 +319,21 @@ class Learning():
             print "Cluster %s has %s datapoints. Mean dst/sim to center = %0.3f with std = %0.3f" \
             % (cluster_label, len(list_of_uuids), means[cluster_label], std[cluster_label])
 
-            filtered_composition[cluster_label] = []
             dst_uuid = zip(cluster_radius[cluster_label], list_of_uuids)
             dst_uuid.sort()
             dst_sorted = [uuid for dst, uuid in dst_uuid]
             #Still works with AP because it stores `cosine distances`
-            filtered_composition[cluster_label] = dst_sorted[:30]
+            filtered_composition[str(cluster_label)] = dst_sorted[:30]
 
-        if self.visualise: self.show_in_rviz = filtered_composition
+        if self.visualise: self.show_in_rviz = cluster_composition
+        #if self.visualise: self.show_in_rviz = filtered_composition
+
         #self.methods["kmeans_composition"] = cluster_composition
         #self.methods["kmeans_composition"] = filtered_composition
         estimator.cluster_dist_means = means
         estimator.cluster_dist_std = std
         self.methods[method] = estimator
 
-
-    def kmeans_test_set(self, iter):
-        """Test a bunch of histograms against the learnt Kmeans model learnt"""
-        estimator = self.methods["kmeans"]
-        test_set_distances = []
-        novel_uuids, not_novel = [], []
-
-        #Iterate over the split-trajectories. To predict future qualitative movements
-        if iter: self.k_means_iterate_over_examples(estimator)
-
-        for uuid, test_histogram in self.X_test.items():
-            closest_cluster_id = estimator.predict(test_histogram)
-            closest_cluster = estimator.cluster_centers_[closest_cluster_id]
-            dst = distance.euclidean(test_histogram, closest_cluster)
-            test_set_distances.append(dst)
-
-            mean = estimator.cluster_dist_means[closest_cluster_id[0]]
-            std = estimator.cluster_dist_std[closest_cluster_id[0]]
-
-            if dst > mean + (std): novel_uuids.append(uuid)
-            else: not_novel.append(uuid)
-
-        print "Inertia of Test Set = %s\n" % sum(test_set_distances)
-        return test_set_distances, (novel_uuids, not_novel)
-
-
-    def k_means_iterate_over_examples(self, estimator):
-        collect_seq_histograms = {}
-        graph_dict = {}
-        t = time.time()
-        for code, graph in zip(self.code_book, self.graphlet_book):
-            graph_dict[code] = graph
-        print "time to create graph dic: ", time.time() - t
-
-        graphlets_for_cluster_centers = {}
-        for cnt, clst in enumerate(estimator.cluster_centers_):
-            graphlets_for_cluster_centers[str(cnt)] = []
-            for index, i in enumerate(clst > 0.01):
-                if i:
-                    #print self.code_book[index]
-                    #print self.graphlet_book[index].graph
-                    graphlets_for_cluster_centers[str(cnt)].append(self.graphlet_book[index])
-        pickle.dump(graphlets_for_cluster_centers, open('/home/strands/STRANDS/TESTING/cluster_AGs.p', "w"))
-
-
-        for uuid_seq_string, histogram in self.X_test.items():
-            if "_test_seq_" not in uuid_seq_string: continue
-            uuid, seq = uuid_seq_string.split('_')[0], uuid_seq_string.split('_')[3]
-
-            if uuid not in collect_seq_histograms: collect_seq_histograms[uuid] = {}
-            collect_seq_histograms[uuid][seq] = histogram
-
-        """DO THIS ONE SUBJECT AT A TIME?"""
-
-        """ALSO - DONT NEED TO KEEP ALL PREDICTED CODES - JUST THE PRED CLUSTER
-        AND A DICT OF CLUSTER_ID:CODES. AND QSR MASKS TO APPLY TO RVIZ (occupancygrid)"""
-
-        for uuid, sequence_preds in collect_seq_histograms.items():
-            print uuid
-            predicted_codes = {}
-            for seq in xrange(1, len(sequence_preds)+1):
-                predicted_codes[seq]=set([])
-
-                hist = np.array(sequence_preds[str(seq)])
-                cluster_id = estimator.predict(hist)
-                predicted_cluster = estimator.cluster_centers_[cluster_id][0]
-                print cluster_id, predicted_cluster
-
-                raw_input("HERE")
-                for i, weight in enumerate(predicted_cluster):
-                    if weight != 0: predicted_codes[seq].add(self.code_book[i])
-
-            actual=set([])
-            #Compare against the graphlets in the complete trajectory (the final seq_id)
-            for i, weight in enumerate(hist):
-                if weight != 0: actual.add(self.code_book[i])
-
-            avg_p = 0
-            for seq, codes in predicted_codes.items():
-                print "seq %s: predicted codes:" % seq, codes
-                matches = codes & actual
-                p = len(matches) / float(len(codes) + len(actual))
-                print "percentage match = %0.2f" % (p*100)
-                avg_p += p
-                #for i in matches:  print graph_dict[i].graph
-            print "average percentage match for uuid: %s = %0.2f" % (uuid, (avg_p/float(seq)*100))
-            sys.exit(1)
-
-
-            for i, feature in enumerate(sequence_preds[str(seq)]):
-                print i
-                if feature > 0:
-                    print self.code_book[i]
-                    print self.graphlet_book[i]
-
-
-
-        sys.exit(1)
 
     def tf_idf_cosine_similarity_matrix(self):
         data = self.data

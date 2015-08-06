@@ -7,6 +7,8 @@ from nav_msgs.msg import GridCells, OccupancyGrid
 def callback_map(data):
     print "\nmap_callback:"
     rospy.loginfo(data.header)
+    print type(data.data)
+    print len(data.data)
 
 def callback_grid(data):
     print "\ngrid_callback:"
@@ -29,7 +31,7 @@ def map_listener():
     rospy.Subscriber("/map", OccupancyGrid, callback_map)
 
 if __name__ == '__main__':
-    #map_listener()
+    map_listener()
     #occu_listener()
-    grid_listener()
+    #grid_listener()
     rospy.spin()
