@@ -64,7 +64,7 @@ def get_mini_batch_trajs(X_test, vis=False):
 
 def get_episodes_for_mini_batches(mini_batches):
 
-    OE = OfflineEpisodes(msg_store='episodes_f1_qtcb_and_dist_seq_test')
+    OE = OfflineEpisodes(msg_store='episodes_f1_multi_seq_test')
 
     for uuid, list_of_trajs in mini_batches.items():
         for cnt, traj in enumerate(list_of_trajs):

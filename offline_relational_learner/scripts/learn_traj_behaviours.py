@@ -158,9 +158,9 @@ def run_all(plotting, episode_store, learn_methods, qsr_type, publishers):
 
         #for k,v in region_data_by_week[roi].items(): print k, len(v)
         r = region_data_by_week[roi]
-        #keep_sample = set(r["wk1"])^ set(r["wk2"])^ set(r["wk3"])^ set(r["wk4"]) ^ set(r["wk5"])
-        keep_sample = set(r["wk1"]) ^ set(r["wk5"])
-        print "Keeping sample from Week 1 and 5: %s" % len(keep_sample)
+        keep_sample = set(r["wk1"])^ set(r["wk2"])^ set(r["wk3"])^ set(r["wk4"]) ^ set(r["wk5"])
+        #keep_sample = set(r["wk1"]) ^ set(r["wk5"])
+        print "Keeping sample from 4 Weeks and week 5: %s" % len(keep_sample)
 
         all_episodes = {}
         trajectory_times = []
@@ -197,21 +197,14 @@ def run_all(plotting, episode_store, learn_methods, qsr_type, publishers):
         # **************************************************************#
         rospy.loginfo('Generating Feature Space')
 
-        feature_space = gh.generate_feature_space(activity_graph_dir, tag)
-        (code_book, graphlet_book, X_source) = feature_space
+        feature_space = gh.generate_feature_space(activity_graph_dir, tag, __out = True)
+        (code_book_hashes, code_book, X_source) = feature_space
 
-        """
-        tot = 0
-        for k,v in X_source.items():
-            for i in v:
-                tot+=i
-        print tot
-        """
-        print "code_book length = ", len(feature_space[0])
-        print "number of uuids = ", len(X_source.keys())
-
+        print "code_book length = ", len(code_book_hashes)
+        print "total number of datapoints = ", len(X_source.keys())
         region_test_set = set(X_source.keys()) & set(week5_uuids)
-        print "len of test set %s in region: %s" % (len(region_test_set), roi)
+        print "size of train set %s in region: %s" % ( len(X_source.keys()) - len(region_test_set), roi)
+        print "size of test set %s in region: %s" % (len(region_test_set), roi)
 
         # **************************************************************#
         #                    Learn a Clustering model                   #
@@ -220,7 +213,7 @@ def run_all(plotting, episode_store, learn_methods, qsr_type, publishers):
         params, tag = gh.AG_setup(input_data, date, str_roi)
         smartThing = Learning(f_space=feature_space, roi=str(roi), vis=plotting)
 
-        smartThing.split_data_on_test_set(scale=True, test_set=list(region_test_set))
+        smartThing.split_data_on_test_set(scale=False, test_set=list(region_test_set))
         # To create the split-trajectories (by seq) used for the trajectory predictions
         #pickle.dump(list(region_test_set), open('/home/strands/STRANDS/TESTING/roi_1_week5_uuids.p', "w"))
 
@@ -234,9 +227,9 @@ def run_all(plotting, episode_store, learn_methods, qsr_type, publishers):
 
             rospy.loginfo('Testing k-Means')
             smartThing.save(learning_area)
+            sys.exit(1)
 
-            test_set_distances, novelty_info = kmeans_test_set(smartThing, iter = True, publish=publishers)
-
+            kmeans_test_set(smartThing, iter=True, publish=publishers)
             if plotting: visualise_clusters(smartThing, novelty_info)
 
         # **************************************************************#

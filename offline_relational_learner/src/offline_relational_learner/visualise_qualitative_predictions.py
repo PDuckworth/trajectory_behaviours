@@ -42,6 +42,8 @@ class Object_gridCells(object):
 
     def add_all_objects_to_grid(self):
         (data_dir, config_path, qsr_params, date) = util.get_qsr_config()
+        qsr_params = qsr_params[0]
+
         (soma_map, soma_config) = util.get_map_config(config_path)
         obs = o_utils.get_objects_from_soma(soma_map, soma_config)
         self.objects = obs.all_objects
@@ -63,7 +65,6 @@ class occupancy_grid(object):
         self.setupOccupancyGrid()
         self.grid = Object_gridCells()
 
-
     def setupOccupancyGrid(self, width=657, height= 731, res=0.05):
         self.occupancygrid = OccupancyGrid()
         self.occupancygrid.data = [0]*int(width*height)
@@ -80,7 +81,6 @@ class occupancy_grid(object):
         p.z = q.x = q.y = q.z = 0
         q.w = 1
         self.occupancygrid.info.origin = Pose(p,q)
-        self.map_listener()
 
     def occu_to_matrix(self):
         mat = np.mat(self.occupancygrid.data)
@@ -89,23 +89,15 @@ class occupancy_grid(object):
 
     def matrix_to_occu(self, mat):
         mat = mat.reshape(1, self.occupancygrid.info.width * self.occupancygrid.info.height, order='C')
-        self.occupancygrid.data = mat.ravel().tolist()[0]
-        #print "len of occu grid = ", len(self.occupancygrid.data)
+        data = np.array(mat.ravel().tolist()[0])
+        data[data == -1 ] = 0
+        self.occupancygrid.data = list(data)
 
     def pub_occu(self, pub):
-        self.occupancygrid.data = [a*b for a,b in zip(self.binary_map, self.occupancygrid.data)]
         try:
             pub.publish(self.occupancygrid)
         except rospy.ROSInterruptException:
             pass
-
-    def map_listener(self):
-        print "listing to /map topic..."
-        rospy.Subscriber("/map", OccupancyGrid, self.callback_map)
-
-    def callback_map(self, map):
-        self.binary_map = [1 if d not in [-1, 100] else 0 for d in map.data]
-
 
 
 class qsr_param_masks(object):
@@ -118,11 +110,16 @@ class qsr_param_masks(object):
         self.colour_range = colour_range
 
         (self.data_dir, config_path, qsr_params, date) = util.get_qsr_config()
+
+        #Remove this when using only one QSR type
+        #qsr_params = qsr_params[0]
+
         self.qsr = qsr_params[0]
         self.qsr_params = qsr_params[1]
 
         self.binary_masks = {}
         self.cluster_occu = {}
+        self.binary_map = self.map_listener()
 
         print "QSRs requested: %s" % self.qsr
         if self.qsr == "arg_distance":
@@ -130,10 +127,20 @@ class qsr_param_masks(object):
             self.get_sorted_params()
             self.get_qsr_masks()
 
+    def map_listener(self):
+        print "listing to /map topic..."
+        rospy.Subscriber("/map", OccupancyGrid, self.callback_map)
+
+
+    def callback_map(self, map):
+        print "MAP CALLBACK"
+        self.binary_map = [1 if d not in [-1, 100] else 0 for d in map.data]
+        self.outside_map = [-1 if d in [-1, 100] else 0 for d in map.data]
 
     def get_qsr_masks(self):
         """For each QSR value, create a (cell x cells) matrix (binary mask) to apply to the occupancygrid"""
         for i in xrange(0,len(self.sorted_params)):
+
             #if i>3: continue
             if self.dbg: print "\nLOOP", i
             cells = self.sorted_params[i][1] / self.res
@@ -187,15 +194,14 @@ class qsr_param_masks(object):
 
         #This removes the center of the mask if i>0
         self.binary_masks[label] = self.remove_center_of_mask(i, binary_circle_mask)
-        """CHECK:qsr_mask[abs(qsr_mask) <= 2.0] = 0  # -ve 1 and -ve 2 are grey in an occupencygrid colour scheme"""
 
 
+    def get_graph_clusters_from_kmeans(self, estimator, code_book_hashes, code_book):
 
-    def get_graph_clusters_from_kmeans(self, estimator, graphlet_book=None):
-
-        if graphlet_book != None: self.graphlet_book=graphlet_book
         graphlet_centers = {}
         qsr_cluster_masks = {}
+
+        t2, t3, t4, t5 = 0, 0, 0, 0
 
         #cluster_sum = [0]*136
         for cnt, clst in enumerate(estimator.cluster_centers_):
@@ -205,22 +211,68 @@ class qsr_param_masks(object):
             for index, i in enumerate(clst):
                 if i> 0.01:
                     weights.append(i)
-                    list_of_AGs.append(self.graphlet_book[index])
+                    ghash = code_book_hashes[index]
+                    list_of_AGs.append(code_book[ghash])
 
+            if self.dbg: print "number of features = ", len(list_of_AGs)
             #0. Normalise AG weights (apply as weights to the qsr masks)
             norm_weights = [i/float(max(weights)) for i in weights]
 
-            #1. get the activity graphs belonging to the cluster center
-            graphlet_centers[clstr_id] = (list_of_AGs, norm_weights)
-
+            t = time.time()
             #2. make a list of qsr masks to apply to the occupency matrix (plus xy positions)
             qsr_cluster_masks[clstr_id] = self.get_cluster_qsrs_and_objects(list_of_AGs, norm_weights)
+            t2 += time.time()-t
+
+            t = time.time()
             #3. appy the masks to create an occupencygrid per cluster
-            self.generate_cluster_occupencyGrid(clstr_id, qsr_cluster_masks[clstr_id])
+            occu = self.generate_cluster_occupencyGrid(clstr_id, qsr_cluster_masks[clstr_id])
+            t3 += time.time()-t
+
+            t = time.time()
+            #4. appy a binary map mask - will keep the occupancygrid inside the map confines
+            occu.occupancygrid.data = [a*b for a,b in zip(self.binary_map, occu.occupancygrid.data)]
+            self.cluster_occu[clstr_id] = occu
+            t4 += time.time()-t
+
+        #5. scale the occupencygrid by the weighted area they cover
+        t = time.time()
+        self.scale_occupency_grids_globally()
+        t5 += time.time()-t
+
+        if self.dbg:
+            print "time2: ", t2
+            print "time3: ", t3
+            print "time4: ", t4
+            print "time5: ", t5
+
+
+    def scale_occupency_grids_globally(self):
+        """ After we have an occupencygrid for each cluster:
+        # weight by the total sum (or avg) of the grid to penalise uncertain clusters."""
+
+        max_cell = 0
+        scaled_mats={}
+        #max_ = max([self.cluster_occu[i].mat.max() for i in self.cluster_occu])
+        for cluster_id, occu in self.cluster_occu.items():
+            (rows, cols) = occu.mat.shape
+            avg_cell = occu.mat.sum()/float(rows*cols)
+            scaled_by_area = (occu.mat/float(avg_cell))
+            scaled_mats[cluster_id] = scaled_by_area
+            if scaled_by_area.max() > max_cell: max_cell = scaled_by_area.max()
+
+        for cluster_id, occu in scaled_mats.items():
+            X_scaled = ((occu / max_cell)*-100).astype(int)
+
+            self.cluster_occu[cluster_id].mat = X_scaled
+            self.cluster_occu[cluster_id].matrix_to_occu(X_scaled)
+
+            #outside map mask - sets area outside the map to -1, so the predictions can ignore this area
+            data = self.cluster_occu[cluster_id].occupancygrid.data
+            temp = [-1 if a==-1 else b for a,b in zip(self.outside_map, data)]
+            self.cluster_occu[cluster_id].occupancygrid.data = temp
 
         #dump = (graphlet_centers, qsr_cluster_masks)
         #pickle.dump(dump, open('/home/strands/STRANDS/TESTING/cluster_AGs.p', "w"))
-
 
     def get_cluster_qsrs_and_objects(self, list_of_AGs, weights):
         add_masks = {}
@@ -231,16 +283,21 @@ class qsr_param_masks(object):
                 print "  number of objects= ", len(ag.object_nodes)
                 print "  number of spatials= ", len(ag.spatial_nodes)
                 print "  number of temporals= ", len(ag.temporal_nodes)
+                print [i['obj_type'] for i in ag.object_nodes]
+                print [i['name'] for i in ag.spatial_nodes]
 
 
             """THINK ABOUT APPLYING THE QSR MASKS WHICH OCCUR IN THE FUTURE (only the second spatial node?)"""
             for object in ag.object_nodes:
                 if object['obj_type'] in self.objects.keys():
                     key = (object['obj_type'], self.objects[object['obj_type']])
-                    if key not in add_masks: add_masks[key] = []
-                    for spatial in object.neighbors():
+
+                    for cnt, spatial in enumerate(object.neighbors()):
+                        #if cnt>0:
+                        if key not in add_masks: add_masks[key] = []
                         tuple = (spatial['name'], weight)
                         add_masks[key].append(tuple)
+
         return add_masks
 
     def generate_cluster_occupencyGrid(self, cluster='', add_masks={}):
@@ -248,38 +305,22 @@ class qsr_param_masks(object):
         occu.occu_to_matrix()
 
         for cnt, ((object, map_xyz), list_of_mask_tuples) in enumerate(add_masks.items()):
-            if self.dbg: print cnt, ((object, map_xyz), list_of_mask_tuples)
+            #if self.dbg: print cnt, ((object, map_xyz), list_of_mask_tuples)
 
             for num_of_temporal_nodes, qsr_tuple in enumerate(list_of_mask_tuples):
                 qsr, weight = qsr_tuple
                 #if qsr != "touch": continue
 
                 pos = xy_to_mat(map_xyz[0], map_xyz[1])
-                if self.dbg: print "Applying %s mask (%s) to %s: (%s)" %(qsr, weight, \
-                                                                        object, pos)
+                if self.dbg: print "Applying %s mask (%s) to %s: (%s)" %(qsr, weight, object, pos)
                 occu.grid.add_object(object, map_xyz)
+
+                #Use this when QSR includes arg_dist_qtcb...
+                modified_qsr = qsr[:-2]
                 occu.mat = o_utils.addAtPos(occu.mat, self.binary_masks[qsr], pos, \
-                                            weight, add=True, vis=self.dbg)
-
-
-        """SCALED OR NORMALISED MATRIX MASKS!"""
-        ## Scaled to 0-1 (used to publish occu to rviz anyway)
-        scaled_mat = ((occu.mat/float(occu.mat.max()))*-100).astype(int)
-        #print scaled_mat[0,:]
-
-        ## Normalised by dividing by sum (or avg) of all grid cells:
-        (rows, cols) = occu.mat.shape
-        p = occu.mat.sum() / float( rows*cols)
-        norm_mat = (occu.mat/float(p))
-        #print norm_mat[0,:]
-
-        scaled_mat = ((norm_mat/float(norm_mat.max()))*-100).astype(int)
-        #print scaled_mat[0,:]
-
-
-        occu.matrix_to_occu(scaled_mat)
-        occu.mat = scaled_mat #save the scaled version of mat
-        self.cluster_occu[cluster] = occu
+                                            weight, add=True, vis=False)#vis=self.dbg)
+        occu.matrix_to_occu(occu.mat)
+        return occu
 
 
 def xy_to_occu(x,y, res=0.05, map_width=657, origin_x=6.3, origin_y=6.55):

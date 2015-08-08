@@ -83,35 +83,36 @@ def generate_feature_space(data_dir, tag, __out=False):
     activity_graphs = pickle.load(open(AG_out_file))
 
     rospy.loginfo('Generating codebook')
-    code_book, graphlet_book = [], []
-    code_book_set, graphlet_book_set = set([]), set([])
+
+    code_book = {}
+    code_book_set = set([])
+
+    special_hashs=[]
+    t0, t1 = 0, 0
     for episodes_file in activity_graphs:
 
-        #for window in activity_graphs[episodes_file].graphlet_hash_cnts:     #Loop through windows, if multiple windows
+        #for window in activity_graphs[episodes_file].graphlet_hash_cnts:     #Loop through all temporal windows, if multiple.
         window = activity_graphs[episodes_file].graphlet_hash_cnts.keys()[0]
 
-        for ghash in activity_graphs[episodes_file].graphlet_hash_cnts[window]:
+        for ghash, graphlet in  activity_graphs[episodes_file].valid_graphlets[window].items():
             if ghash not in code_book_set:
                 code_book_set.add(ghash)
-                graphlet_book_set.add(activity_graphs[episodes_file].valid_graphlets[window][ghash])
-    code_book.extend(code_book_set)
-    graphlet_book.extend(graphlet_book_set)
+                code_book[ghash] = graphlet
 
-    print "len of code book: " + repr(len(code_book))
-    if len(code_book) != len(graphlet_book):
-        print "BOOK OF HASHES DOES NOT EQUAL BOOK OF ACTIVITY GRAPHS. \n EXITING."
-        sys.exit(1)
+    code_book_hashes =[]
+    code_book_hashes.extend(code_book_set)
 
+    print "len of code book: " + repr(len(code_book_hashes))
     rospy.loginfo('Generating codebook FINISHED')
 
-    rospy.loginfo('Generating features')
-    cnt = 0
     X_source = {}
+    rospy.loginfo('Generating features')
     #Histograms are Windowed dictionaries of histograms
-    for episodes_file in activity_graphs:
+    for cnt, episodes_file in enumerate(activity_graphs):
         if __out: print cnt, episodes_file
-        X_source[episodes_file] = activity_graphs[episodes_file].get_histogram(code_book)
-        cnt+=1
+
+        histogram = activity_graphs[episodes_file].get_histogram(code_book_hashes)
+        X_source[episodes_file] = histogram
 
         if __out and cnt ==1:
             key = activity_graphs[episodes_file].graphlet_hash_cnts.keys()[0]
@@ -122,7 +123,9 @@ def generate_feature_space(data_dir, tag, __out=False):
 
     rospy.loginfo('Generating features FINISHED')
     rospy.loginfo('Saving all experiment data')
-    feature_space = (code_book, graphlet_book, X_source)
+
+    #This is: (list_of_hashes_used_to_create_hists, a_dict_of_hash_to_AG, a_dictionary_of_histograms)
+    feature_space = (code_book_hashes, code_book, X_source)
 
     feature_space_out_file = os.path.join(data_dir + 'feature_space_' + tag + '.p')
     pickle.dump(feature_space, open(feature_space_out_file, 'w'))

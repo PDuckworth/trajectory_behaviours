@@ -66,7 +66,7 @@ class Learning():
         elif load_from_file is not None and load_from_file != "":
             self.load(load_from_file)
         else:
-            (self.code_book, self.graphlet_book, \
+            (self.code_book_hashes, self.code_book, \
                 self.feature_space) = f_space
             self.methods = {}
             self.roi = roi
@@ -85,9 +85,10 @@ class Learning():
             spatial_model_msg = spatialModelMsg()
             spatial_model_msg.soma_roi_id = str(self.roi)
             spatial_model_msg.methods = pickle.dumps(self.methods)
-            spatial_model_msg.code_book = self.code_book
-            for i in self.graphlet_book:
-                    spatial_model_msg.graphlet_book.append(pickle.dumps(i))
+            spatial_model_msg.code_book = self.code_book_hashes
+            for (ghash, graph) in self.code_book.items():
+                tuple = (ghash, graph)
+                spatial_model_msg.graphlet_book.append(pickle.dumps(tuple))
 
             self._store_client.update(message=spatial_model_msg, \
                 message_query={"soma_roi_id" : str(self.roi)}, \
@@ -98,9 +99,9 @@ class Learning():
             filename = os.path.join(dir, 'roi_' + self.roi + '_smartThing.p')
 
             foo = { "ROI": self.roi, "feature_space": self.feature_space, \
-                    "code_book": self.code_book, "graphlet_book": self.graphlet_book, \
+                    "code_book_hashes": self.code_book_hashes, "code_book": self.code_book, \
                     "learning_methods": self.methods, \
-                    "X_test": self.X_test, "show_clstrs_in_rviz": self.show_in_rviz}
+                    "X_test": self.X_test, "show_clstrs_in_rviz": self.cluster_trajs}
 
             print(filename)
             with open(filename, "wb") as f:
@@ -119,11 +120,11 @@ class Learning():
                 foo = pickle.load(f)
             self.roi = foo["ROI"]
             self.methods = foo["learning_methods"]
+            self.code_book_hashes = foo["code_book_hashes"]
             self.code_book = foo["code_book"]
-            self.graphlet_book = foo["graphlet_book"]
             self.feature_space = foo["feature_space"]
             self.X_test = foo["X_test"]
-            self.show_in_rviz = foo["show_clstrs_in_rviz"]
+            self.cluster_trajs = foo["show_clstrs_in_rviz"]
             self.flag = True
             print "Loaded: " + repr(self.methods.keys())
             print("success")
@@ -142,9 +143,10 @@ class Learning():
             self.roi = log['soma_roi_id']
             self.methods = pickle.loads(str(log['methods']))
             self.code_book = log['code_book']
-            self.graphlet_book = []
+            self.code_book = {}
             for i in log['graphlet_book']:
-                self.graphlet_book.append(pickle.loads(str(i)))
+                tuple = pickle.loads(str(i))
+                self.code_book[tuple[0]] = tuple[1]
             self.methods = pickle.loads(str(log['methods']))
 
         if cnt != 1:
@@ -207,7 +209,7 @@ class Learning():
         max_score = max(variable_scores)
         feature1 = variable_scores.index(max_score)
         print "max score = %s" % max_score
-        print ">> best feature: ", self.code_book[feature1], "\n", self.graphlet_book[feature1].graph
+        #print ">> best feature: ", self.code_book[feature1], "\n", self.graphlet_book[feature1].graph
         return
 
 
@@ -296,6 +298,7 @@ class Learning():
                                         estimator.labels_, self.data)):
             if method == "kmeans":
                 dst = euclidean(sample, estimator.cluster_centers_[label])
+
             elif method == "affinityprop":
                 dst = estimator.affinity_matrix_[estimator.cluster_centers_indices_[label]][cnt]
 
@@ -325,8 +328,9 @@ class Learning():
             #Still works with AP because it stores `cosine distances`
             filtered_composition[str(cluster_label)] = dst_sorted[:30]
 
-        if self.visualise: self.show_in_rviz = cluster_composition
-        #if self.visualise: self.show_in_rviz = filtered_composition
+        if self.visualise:
+            self.cluster_trajs = cluster_composition
+            self.cluster_trajs_filtered = filtered_composition
 
         #self.methods["kmeans_composition"] = cluster_composition
         #self.methods["kmeans_composition"] = filtered_composition

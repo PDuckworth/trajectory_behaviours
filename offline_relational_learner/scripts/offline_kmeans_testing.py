@@ -33,6 +33,7 @@ def kmeans_test_set(smartThing, iter, vis=False, publish=None):
         k_means_iterate_over_examples(smartThing, publish, vis)
     else:
         for uuid, test_histogram in smartThing.X_test.items():
+
             closest_cluster_id = estimator.predict(test_histogram)
             closest_cluster = estimator.cluster_centers_[closest_cluster_id]
             dst = distance.euclidean(test_histogram, closest_cluster)
@@ -51,9 +52,12 @@ def kmeans_test_set(smartThing, iter, vis=False, publish=None):
 def k_means_iterate_over_examples(smartThing, publishers, vis=False):
 
     estimator = smartThing.methods["kmeans"]
-    graphlet_book = smartThing.graphlet_book
+    code_book_hashes = smartThing.code_book_hashes  #list of hashes (used for histograms)
+    code_book = smartThing.code_book    #dictionary[hash] = graph
+
 
     rospy.loginfo('Testing sequences and comparing with complete trajectories...')
+    print len(code_book_hashes)
 
     #1. Create an empty GridCells
     grid = vis_tools.Object_gridCells()
@@ -61,15 +65,32 @@ def k_means_iterate_over_examples(smartThing, publishers, vis=False):
     grid.add_all_objects_to_grid()
 
     #3. Get the QSR and Object params - Create an array Mask for each QSR
-    qsrs = vis_tools.qsr_param_masks(grid, dbg=False)
+    qsrs = vis_tools.qsr_param_masks(grid, dbg=True)
 
     #4. Get the cluster centers represented as Activity Graphs
     #   Produce a mask for each cluster center from the Graphs
-    qsrs.get_graph_clusters_from_kmeans(estimator, graphlet_book)
+
+
+    """TEST"""
+    #hist = np.array(smartThing.X_test["5bf8898c-e230-55f5-b902-7d97a90b4a7b_test_seq_7"])
+    hist = np.array(smartThing.X_test["5bf8898c-e230-55f5-b902-7d97a90b4a7b"])
+    print hist
+    ids =  [i for i, e in enumerate(hist) if e != 0]
+    print ids
+    for i in ids:
+        ghash = code_book_hashes[i]
+        print "\n",i, ghash, code_book[ghash].graph
+    estimator.cluster_centers_ = [hist]
+    smartThing.cluster_trajs = {}
+    smartThing.cluster_trajs['0'] = ["5bf8898c-e230-55f5-b902-7d97a90b4a7b"]
+
+    """"""
+
+    qsrs.get_graph_clusters_from_kmeans(estimator, code_book_hashes, code_book)
     print "Created an Occupency Grid for clusters: ", qsrs.cluster_occu.keys()
 
     if vis:
-        visualise_clusters(qsrs, publishers, smartThing.show_in_rviz) #Currently all traj's belonging to cluster in this list
+        visualise_clusters(qsrs, publishers, smartThing.cluster_trajs) #Currently all traj's belonging to cluster in this list
 
     #6. Test:
     rospy.loginfo('Testing all the sequences of trajectories (takes a while...)')
@@ -82,80 +103,88 @@ def k_means_iterate_over_examples(smartThing, publishers, vis=False):
         if uuid not in collect_seq_histograms: collect_seq_histograms[uuid] = {}
         collect_seq_histograms[uuid][int(seq)] = histogram
 
-
-    """HOW HAS THIS HAPPENED?"""
-    #for i, v in collect_seq_histograms["eb78e131-d6ce-5ce4-ad21-7649f71981d9"].items():
-    #    print i
-
     """Two scores:
     #1. How good is the prediction on partial trajectories. Does seq match seq_n's prediction.
     #2. How good is the prediction of future trajectories. This is the occupancygrid scores summed for future.
     """
+
     cluster_scores = {}
+    cnt = 0
     for uuid, sequence_preds in collect_seq_histograms.items():
+        cnt+=1
         print uuid
         cluster_scores[uuid] = {}
-        #if uuid != "eb78e131-d6ce-5ce4-ad21-7649f71981d9": continue
 
         #1. Get trajectory from mongo
         query = '''{"uuid" : "%s" }''' % uuid
         q = ot.query_trajectories(query, vis)
         q.get_poses()
 
-        max_seq = max(sequence_preds.keys())
-        for seq in xrange(1, len(sequence_preds)+1):
-            if seq not in sequence_preds: continue
-            cluster_scores[uuid][seq] = []
+        #Get the occu positions from the xy map poses:
+        occu_pts = [vis_tools.xy_to_occu(x,y) for x,y,z in q.trajs[uuid]]
 
+        max_seq = max(sequence_preds.keys())
+        batch_size = len(occu_pts)/ float(max_seq)
+
+        all_future_negative = False
+        for seq in xrange(1, len(sequence_preds)+1):
+            if all_future_negative is True: continue #All future sequences are all -1 (i.e. outside map region)
+            if seq not in sequence_preds: continue #Some reason dont have traj data for this seq
+
+            next_pose = seq*int(batch_size) + 1
+            if vis: print "Seq: %s (of %s). Next pose: %s" % (seq, max_seq, next_pose)
+
+            # Predict a cluster id (for each seq)
             hist = np.array(sequence_preds[seq])
             cluster_id = estimator.predict(hist)[0]
+            vis_tools.plot_trajectory_qsrs(uuid, hist)
 
+
+            # Take a copy of that cluster's occu map
             qsrs_copy = copy.deepcopy(qsrs.cluster_occu[str(cluster_id)])
-            score = get_score_from_occupencygrid(q.trajs[uuid], (seq, max_seq), \
-                                        qsrs_copy, cluster_id, vis, publishers[1])
-            cluster_scores[uuid][seq].append((cluster_id, score))
-        #print cluster_scores
+            occu_values = [qsrs_copy.occupancygrid.data[pt] for pt in occu_pts]
+            #print occu_values
 
-    pickle.dump(cluster_scores, open('/home/strands/STRANDS/TESTING/cluster_scores_using_weights.p', "w"))
-    rospy.loginfo("Finished generating scores (and dumped them in TESTING)")
+            #Make negative score (which are outside map) == 1. Then re
+            non_neg_occu_values, visualise_points=[], []
+            for v in occu_values[next_pose:]:
+                if v !=-1: non_neg_occu_values.append(v)
+
+            if vis:
+                for cnt, v in enumerate(occu_values):
+                    visualise_points.append(occu_pts[cnt])
+
+            ##non_neg_occu_values = [v if v !=-1 else 1 for v in occu_values[next_pose:]]
+            #print non_neg_occu_values
+            #print sum(occu_values[next_pose:])/float(len(occu_values[next_pose:]))
+            if len(non_neg_occu_values) != 0:
+                score = sum(non_neg_occu_values)/float(len(non_neg_occu_values))
+                #print score
+            else:
+                all_future_negative = True
+
+            if all_future_negative is not True:
+                cluster_scores[uuid][seq] = (cluster_id, score)
+
+            if vis:
+                for cnt, pt in enumerate(visualise_points):
+                    if cnt < next_pose: qsrs_copy.occupancygrid.data[pt] = 120
+                    else: qsrs_copy.occupancygrid.data[pt] = 0
+                visualise_predictions(qsrs_copy, cluster_id, publishers[1])
+
+        if vis: print cluster_scores[uuid]
+
+    name = 'cluster_scores_multi.p'
+    file = '/home/strands/STRANDS/TESTING/' + name
+    pickle.dump(cluster_scores, open(file, "w"))
+    rospy.loginfo("Finished generating scores (and dumped them in TESTING/%s)" %name)
 
     """
     MULTIPLE "SCORES"?
-        1. NUMBER OF PREDICTED GRAPHLETS ALSO IN CLUSTER CENTERS
-        2. NUMBER OF GRAPHLETS IN CLUSTER WHICH ARE IN PREDICTION
-        3. AMMOUNT THE (predicted) OCCUPANCY GRID OVERLAPS THE FULL TRAJECTORY -> possibly the best metric.
+        1. NUMBER OF PREDICTED GRAPHLETS ALSO IN CLUSTER CENTERS?
+        2. NUMBER OF GRAPHLETS IN CLUSTER WHICH ARE IN PREDICTION?
+        3. AMMOUNT THE (predicted) OCCUPANCY GRID OVERLAPS THE FULL TRAJECTORY -> Done
     """
-
-
-def get_score_from_occupencygrid(traj, seq_range, qsrs, cluster_id, vis=False, pub=None):
-    (seq, max_seq) = seq_range
-    mini_batches = len(traj)/ float(max_seq)
-
-    traj_occu_values = []
-    next_pose = seq*int(mini_batches) + 1
-    print "seq: %s (of %s)" %(seq, max_seq)
-    print "  predicted cluster: %s. #test_poses: %s. #future_poses: %s." \
-            %(cluster_id, next_pose, len(traj[next_pose:]))
-    if len(traj[next_pose:]) == 0: return
-
-    visualise_points=[]
-    for cnt, (x,y,z) in enumerate(traj):
-        occu_pt = vis_tools.xy_to_occu(x,y)
-        traj_occu_values.append(qsrs.occupancygrid.data[occu_pt])
-        if vis: visualise_points.append(occu_pt)
-
-    if vis:
-        for cnt, occu_pt in enumerate(visualise_points):
-            if cnt < next_pose: qsrs.occupancygrid.data[occu_pt] = 120
-            else: qsrs.occupancygrid.data[occu_pt] = 0
-
-    #print "trajectory prediction scores = ", traj_occu_values
-    avg = sum(traj_occu_values[next_pose:])/float(len(traj_occu_values[next_pose:]))
-    print "  avg future occu score = %s" %avg
-
-    if vis: visualise_predictions(qsrs, cluster_id, pub)
-    return avg
-
 
 def visualise_predictions(qsrs, id, pub):
     """TECHNIQUES TO IMPOVE VIS:
@@ -164,7 +193,7 @@ def visualise_predictions(qsrs, id, pub):
     cnt=0
     while not rospy.is_shutdown() and cnt==0:
         qsrs.pub_occu(pub)
-        print "showing: cluster_%s" % id
+        print "  showing: cluster_%s" % id
         raw_input("pause...")
         cnt = 1
 
@@ -175,7 +204,6 @@ def visualise_clusters(qsrs, pub, show_uuids):
             print "Cluster: %s" %cluster
             query = ot.make_query(show_uuids[cluster])
             q = ot.query_trajectories(query, True)
-
             qsrs.cluster_occu[cluster].pub_occu(pub[1])
             qsrs.cluster_occu[cluster].grid.pub_grid(pub[0])
             raw_input("pause...")
@@ -190,20 +218,25 @@ def getCeilThreshold(a, MinClip):
     if a == 100: return 110
     else: return int(np.ceil(float(a) / MinClip) * MinClip)
 
-def evaluate_predictions(scores_dict, vis=False, dbg=False):
+
+def evaluate_predictions(scores_dict, vis=False, dbg=False, plot=False):
     actual = {}
     predicted = {}
     scores = {}
 
     for uuid, seq_dict in scores_dict.items():
         if len(seq_dict.keys()) >0: final_seq = max(seq_dict.keys())
-        else: continue
+        else: continue  #ignore subjects who have no predictions (outside map maybe)
 
-        (final_prediction, final_score) = seq_dict[final_seq][0]
+        (final_prediction, final_score) = seq_dict[final_seq]
         if dbg: print "%s. Final Pred: %s" % (uuid, final_prediction)
 
+        l = []
         for seq, tuple in seq_dict.items():
-            (prediction, score) = tuple[0]
+            (prediction, score) = tuple
+            s = '%2.0f' %score
+            l.append(s)
+
             percent_seen = seq/float(final_seq)*100
             ceil_value = getCeilThreshold(percent_seen, 10)
             if dbg: print "  seq: %s, pred: %s, score: %s, floored: %s" % (seq, prediction, score, ceil_value)
@@ -217,8 +250,9 @@ def evaluate_predictions(scores_dict, vis=False, dbg=False):
                 predicted[ceil_value].append(prediction)
                 scores[ceil_value].append(score)
 
+        if dbg is False: print "%s.\n  Scores: %s" % (uuid, l)
     results = (predicted, actual, scores)
-    if vis: plot_results(results)
+    plot_results(results, plot)
 
 
 def generate_fig(x, y, label, yticks):
@@ -234,15 +268,15 @@ def generate_fig(x, y, label, yticks):
     ax.set_xticklabels([percent_map[i] for i in range(10,120, 10) ])
     if yticks is 0.1:
         ax.set_yticks([0,0.1,0.2,0.3,0.4,0.5,0.6,0.7,0.8,0.9,1])
-    elif yticks is 10:
-        ax.set_yticks(range(60,85,5))
+    #elif yticks is 10:
+    #    ax.set_yticks(range(60,85,5))
 
     plt.title('%s: \nPredicting the trajectory cluster on partial trajectories' %label)
     filename = '/tmp/%s_cluster_scores.jpg' % label
     plt.savefig(filename, bbox_inches='tight', dpi=100)
 
 
-def plot_results(results):
+def plot_results(results, plot):
     import warnings
     warnings.filterwarnings("ignore", category=DeprecationWarning)
     rospy.loginfo('Getting Results...')
@@ -261,18 +295,19 @@ def plot_results(results):
 
         print "Seq percent: %s" % percent
         print "Prediction score %s" % avg
-        print(classification_report(y_true[percent], y_pred[percent]))
+        if plot:
+            print(classification_report(y_true[percent], y_pred[percent]))
 
-    x = range(10, 120, 10)
-    generate_fig(x, p, "Precision", 0.1)
-    generate_fig(x, r, "Recall", 0.1)
-    generate_fig(x, f1, "F1 Score", 0.1)
+    if plot:
+        x = range(10, 120, 10)
+        generate_fig(x, p, "Precision", 0.1)
+        generate_fig(x, r, "Recall", 0.1)
+        generate_fig(x, f1, "F1 Score", 0.1)
 
-    x = range(10, 110, 10)
-    generate_fig(x, avg_scores, "Future Prediction Score (avg)", 10)
+        x = range(10, 110, 10)
+        generate_fig(x, avg_scores, "Future Prediction Score (avg)", 10)
 
-
-    plt.show()
+        plt.show()
 
 
 
@@ -281,12 +316,12 @@ if __name__ == "__main__":
     data_dir = '/home/strands/STRANDS/'
 
     parser = argparse.ArgumentParser(description="Unsupervised Learning on relational qsr epiosdes")
-    parser.add_argument("-t", "--test", type=str, help=" 'TestSeq', 'TestFull', or 'None'", default=None)
-    parser.add_argument("-p", "--plotting", type=int, help="plot grap", default=0)
+    parser.add_argument("-t", "--test", type=str, help=" 'TestSeq', 'TestFull', 'Eval' or 'None'", default=None)
+    parser.add_argument("-p", "--plotting", type=int, help="plot graphs", default=0)
     parser.add_argument("-v", "--vis_pred", type=int, help="visualise predictions in rviz", default=0)
     args = parser.parse_args()
 
-    filename = os.path.join(data_dir + 'learning/roi_1_smartThing_4weeksTrain.p')
+    filename = os.path.join(data_dir + 'learning/roi_1_smartThing.p')
     smartThing=Learning(load_from_file=filename)
 
     pub_g = rospy.Publisher('/trajectory_behaviours/grid', GridCells, latch=True, queue_size=0)
@@ -295,12 +330,15 @@ if __name__ == "__main__":
 
     if args.test == "TestSeq":
         kmeans_test_set(smartThing, iter=True, vis= bool(args.vis_pred), publish=publishers)
+
     elif args.test == "TestFull":
-        test_set_distances, (novel_uuids, not_novel) = kmeans_test_set(smartThing, iter=True, vis= bool(args.vis_pred), publish=publishers)
+        test_set_distances, (novel_uuids, not_novel) = kmeans_test_set(smartThing, iter=True,\
+                        vis= bool(args.vis_pred), publish=publishers)
 
+    elif args.test == "Eval":
+        test_scores = '/home/strands/STRANDS/TESTING/cluster_scores_multi.p'
+        print test_scores
+        with open(test_scores, "rb") as f:
+            scores = pickle.load(f)
 
-    test_scores = '/home/strands/STRANDS/TESTING/cluster_scores_using_weights.p'
-    with open(test_scores, "rb") as f:
-        scores = pickle.load(f)
-
-    evaluate_predictions(scores, bool(args.plotting), dbg=True)
+        evaluate_predictions(scores, bool(args.plotting), dbg=False, plot= bool(args.plotting))

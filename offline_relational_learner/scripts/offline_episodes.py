@@ -165,7 +165,6 @@ class OfflineEpisodes(object):
             ret = self._episode_client(log['uuid'], \
                                       t.get_trajectory_message())
 
-
     def _episode_client(self, uuid, Trajectory):
         self.uuids.append(uuid)
         rospy.wait_for_service('/episode_service')
@@ -195,7 +194,7 @@ if __name__ == "__main__":
 
     st_0 = time.time()
     vis=False
-    episode_store = 'relational_episodes_test'
+    episode_store = 'episodes_f1_multi'
     oe = OfflineEpisodes(vis, episode_store)
 
     resutls_of_filtering = []

@@ -126,7 +126,7 @@ def handle_episodes(req):
     two_proxies = TwoProxies(gs, msg_store, soma_map, soma_config)
 
     roi = two_proxies.trajectory_roi(req.trajectory.uuid, trajectory_poses[uuid])
-    if roi == None: return EpisodeServiceResponse(uuid=uuid)
+    if roi is None: return EpisodeServiceResponse(uuid=uuid)
 
     ti2=time.time()
     #This currently takes too long!
@@ -143,19 +143,22 @@ def handle_episodes(req):
     closest_objs_to_trajs = ot.trajectory_object_dist(objects, trajectory_poses, select=5)
     ti4=time.time()
 
-    """3. QSRLib data parser"""#
+    """3. QSRLib data parser"""
     tq0=time.time()
 
+    (d, c, force_params, da) = util.get_qsr_config()
     qsr_reader = tdr.Trajectory_Data_Reader(objects=objects, \
                                         trajectories=trajectory_poses, \
                                         objs_to_traj_map = closest_objs_to_trajs, \
                                         roi=roi, vis=visualise_qsrs, \
-                                        current_uuids=current_uuids)
+                                        current_uuids=current_uuids,
+                                        multi_params = force_params)
 
-    params_str = ", ".join(str(x) for x in qsr_reader.params)
     #tr = qsr_reader.spatial_relations[uuid].trace
     #for i in tr:
-    #   print tr[i].qsrs['Printer (photocopier)_2,trajectory'].qsr
+    #    print i, tr[i].qsrs['trajectory,Plant (tall)_7'].qsr, type(tr[i].qsrs['trajectory,Plant (tall)_7'].qsr)
+
+    params_str = qsr_reader.params_str
 
     """3.5 Check the uuid is new (or stitch QSRs together)"""
     print "currently in memory = ", stitching.stored_uuids
