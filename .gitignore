@@ -1,6 +1,13 @@
 ## Custom
 .idea/
 
+## Not needed on Git
+box_sum.py
+get_long_tracks.py
+jenks_algorithm.py
+quiver.py
+
+
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]
