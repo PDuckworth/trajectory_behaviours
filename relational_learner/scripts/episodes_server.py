@@ -27,6 +27,7 @@ class stitch_uuids(object):
         self.all_uuids = []
 
     def check_stored_uuids(self, current_uuids):
+        print "checking..."
         for uuid in self.stored_uuids:
             if uuid not in current_uuids:
                 self.stored_uuids.remove(uuid)
@@ -146,13 +147,11 @@ def handle_episodes(req):
     """3. QSRLib data parser"""
     tq0=time.time()
 
-    (d, c, force_params, da) = util.get_qsr_config()
     qsr_reader = tdr.Trajectory_Data_Reader(objects=objects, \
                                         trajectories=trajectory_poses, \
                                         objs_to_traj_map = closest_objs_to_trajs, \
                                         roi=roi, vis=visualise_qsrs, \
-                                        current_uuids=current_uuids,
-                                        multi_params = force_params)
+                                        current_uuids=current_uuids)
 
     #tr = qsr_reader.spatial_relations[uuid].trace
     #for i in tr:
