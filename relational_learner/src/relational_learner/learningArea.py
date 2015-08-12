@@ -53,8 +53,7 @@ class Learning():
     Accepts a feature space, where rows are instances, and columns are features.
     '''
 
-    def __init__(self, f_space=None, roi="",
-                    vis=False, load_from_file=None):
+    def __init__(self, f_space=None, roi="", vis=False, load_from_file=None):
 
         if load_from_file is 'mongodb':
             self.roi = roi
@@ -154,23 +153,26 @@ class Learning():
             print("%s objects in this region returned" % cnt)
         else: self.flag = True
 
-    def pca_investigate_variables(self):
+    def pca_investigate_variables(self, apply=False):
         """
         1. Sort the eigenvalues, and select the eigenvalues with the highest.
         2. Combine the eigenvectors to form the new subspace. Matrix W.
         3. transform our samples  y= W^T * x
         4. assert transformed.shape == (k,40). where k is the reduced subspace dimension.
         """
-        X = np.array(self.feature_space.values())
-        print "Sample space shape >>", X.shape
 
         pca = PCA(n_components=0.99)
         #pca = PCA(n_components=3)
-        transf = pca.fit_transform(X)
+
+        print "Sample space shape >>", self.data.shape
+        transf = pca.fit_transform(self.data)
+        if apply:
+            self.data = transf
+
         print ">>>pca ", pca
         print "Transform the samples onto the new subspace: ", transf.shape
         #print "> comps = ", pca.components_
-        print "> var explained by each comp:", pca.explained_variance_ratio_
+        print "> var explained by top 10 components:", pca.explained_variance_ratio_[:10]
 
         #get_relevant_variable()
         num_features = len(pca.components_[0])
@@ -184,8 +186,18 @@ class Learning():
             for i, var in enumerate(component):
                 variable_scores[i] += abs(var*pca.explained_variance_ratio_[cnt])
 
+        if apply:
+            pca_dict = {}
+            pca_test_set = pca.transform(self.X_test.values())
+
+            for cnt, uuid in enumerate(self.X_test.keys()):
+                pca_dict[uuid] = pca_test_set[cnt]
+            self.X_test = pca_dict
+
+            self.methods["pca"] = pca
+
         #print ">> Weighting of each variable: \n", variable_scores, "\n"
-        if self.vis:
+        if self.visualise:
             plt.plot(transf, 'o', markersize=5, color='blue', alpha=0.5, label='all data')
 
             #plt.plot(sklearn_transf[20:40,0], sklearn_transf[20:40,1],\
@@ -199,8 +211,9 @@ class Learning():
             plt.title('Transformed samples with class labels from sklearn.PCA()')
 
             plt.show()
-
         return pca, variable_scores
+
+
 
     def pca_graphlets(self, pca, variable_scores, top=0.1):
         """
@@ -209,7 +222,8 @@ class Learning():
         max_score = max(variable_scores)
         feature1 = variable_scores.index(max_score)
         print "max score = %s" % max_score
-        #print ">> best feature: ", self.code_book[feature1], "\n", self.graphlet_book[feature1].graph
+        ghash = self.code_book_hashes[feature1]
+        print ">> best feature: ", ghash, "\n", self.code_book[ghash].graph
         return
 
 
@@ -238,6 +252,7 @@ class Learning():
 
     def kmeans(self, k=None):
         n_samples, n_features = self.data.shape
+
         # determine your range of K
         if k == None:
             k_range = range(5,20)

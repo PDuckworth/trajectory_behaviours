@@ -197,7 +197,7 @@ def run_all(plotting, episode_store, learn_methods, qsr_type, publishers):
         # **************************************************************#
         rospy.loginfo('Generating Feature Space')
 
-        feature_space = gh.generate_feature_space(activity_graph_dir, tag, __out = True)
+        feature_space = gh.generate_feature_space(activity_graph_dir, tag, __out = False)
         (code_book_hashes, code_book, X_source) = feature_space
 
         print "code_book length = ", len(code_book_hashes)
@@ -211,11 +211,14 @@ def run_all(plotting, episode_store, learn_methods, qsr_type, publishers):
         # **************************************************************#
         rospy.loginfo('Learning...')
         params, tag = gh.AG_setup(input_data, date, str_roi)
+
         smartThing = Learning(f_space=feature_space, roi=str(roi), vis=plotting)
 
-        smartThing.split_data_on_test_set(scale=False, test_set=list(region_test_set))
+        smartThing.split_data_on_test_set(scale=True, test_set=list(region_test_set))
         # To create the split-trajectories (by seq) used for the trajectory predictions
         #pickle.dump(list(region_test_set), open('/home/strands/STRANDS/TESTING/roi_1_week5_uuids.p', "w"))
+
+        pca, scores = smartThing.pca_investigate_variables(apply = True)
 
         # **************************************************************#
         #                           Learn KMEANS                        #

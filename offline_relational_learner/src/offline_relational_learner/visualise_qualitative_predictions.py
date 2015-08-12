@@ -112,7 +112,7 @@ class qsr_param_masks(object):
         (self.data_dir, config_path, qsr_params, date) = util.get_qsr_config()
 
         #Remove this when using only one QSR type
-        #qsr_params = qsr_params[0]
+        qsr_params = qsr_params[0]
 
         self.qsr = qsr_params[0]
         self.qsr_params = qsr_params[1]
@@ -317,7 +317,8 @@ class qsr_param_masks(object):
 
                 #Use this when QSR includes arg_dist_qtcb...
                 modified_qsr = qsr[:-2]
-                occu.mat = o_utils.addAtPos(occu.mat, self.binary_masks[qsr], pos, \
+                #modified_qsr = qsr
+                occu.mat = o_utils.addAtPos(occu.mat, self.binary_masks[modified_qsr], pos, \
                                             weight, add=True, vis=False)#vis=self.dbg)
         occu.matrix_to_occu(occu.mat)
         return occu

@@ -52,9 +52,16 @@ def kmeans_test_set(smartThing, iter, vis=False, publish=None):
 def k_means_iterate_over_examples(smartThing, publishers, vis=False):
 
     estimator = smartThing.methods["kmeans"]
+    pca = smartThing.methods["pca"]
+    print pca.n_components
+    sys.exit(1)
+
     code_book_hashes = smartThing.code_book_hashes  #list of hashes (used for histograms)
     code_book = smartThing.code_book    #dictionary[hash] = graph
 
+    code_book_hashes = pca.transform(code_book_hashes)[0]
+    print len(code_book_hashes)
+    print code_book_hashes[0]
 
     rospy.loginfo('Testing sequences and comparing with complete trajectories...')
     print len(code_book_hashes)
@@ -65,26 +72,24 @@ def k_means_iterate_over_examples(smartThing, publishers, vis=False):
     grid.add_all_objects_to_grid()
 
     #3. Get the QSR and Object params - Create an array Mask for each QSR
-    qsrs = vis_tools.qsr_param_masks(grid, dbg=True)
+    qsrs = vis_tools.qsr_param_masks(grid, dbg=False)
+
+    """TEST"""
+    # #hist = np.array(smartThing.X_test["5bf8898c-e230-55f5-b902-7d97a90b4a7b_test_seq_7"])
+    # hist = np.array(smartThing.X_test["5bf8898c-e230-55f5-b902-7d97a90b4a7b"])
+    # print hist
+    # ids =  [i for i, e in enumerate(hist) if e != 0]
+    # print ids
+    # for i in ids:
+    #     ghash = code_book_hashes[i]
+    #     print "\n",i, ghash, code_book[ghash].graph
+    # estimator.cluster_centers_ = [hist]
+    # smartThing.cluster_trajs = {}
+    # smartThing.cluster_trajs['0'] = ["5bf8898c-e230-55f5-b902-7d97a90b4a7b"]
+    """"""
 
     #4. Get the cluster centers represented as Activity Graphs
     #   Produce a mask for each cluster center from the Graphs
-
-
-    """TEST"""
-    #hist = np.array(smartThing.X_test["5bf8898c-e230-55f5-b902-7d97a90b4a7b_test_seq_7"])
-    hist = np.array(smartThing.X_test["5bf8898c-e230-55f5-b902-7d97a90b4a7b"])
-    print hist
-    ids =  [i for i, e in enumerate(hist) if e != 0]
-    print ids
-    for i in ids:
-        ghash = code_book_hashes[i]
-        print "\n",i, ghash, code_book[ghash].graph
-    estimator.cluster_centers_ = [hist]
-    smartThing.cluster_trajs = {}
-    smartThing.cluster_trajs['0'] = ["5bf8898c-e230-55f5-b902-7d97a90b4a7b"]
-
-    """"""
 
     qsrs.get_graph_clusters_from_kmeans(estimator, code_book_hashes, code_book)
     print "Created an Occupency Grid for clusters: ", qsrs.cluster_occu.keys()
@@ -101,7 +106,10 @@ def k_means_iterate_over_examples(smartThing, publishers, vis=False):
         uuid, seq = uuid_seq_string.split('_')[0], uuid_seq_string.split('_')[3]
 
         if uuid not in collect_seq_histograms: collect_seq_histograms[uuid] = {}
+
         collect_seq_histograms[uuid][int(seq)] = histogram
+        #pca.transform(histogram)[0]
+
 
     """Two scores:
     #1. How good is the prediction on partial trajectories. Does seq match seq_n's prediction.
@@ -137,8 +145,6 @@ def k_means_iterate_over_examples(smartThing, publishers, vis=False):
             # Predict a cluster id (for each seq)
             hist = np.array(sequence_preds[seq])
             cluster_id = estimator.predict(hist)[0]
-            vis_tools.plot_trajectory_qsrs(uuid, hist)
-
 
             # Take a copy of that cluster's occu map
             qsrs_copy = copy.deepcopy(qsrs.cluster_occu[str(cluster_id)])
