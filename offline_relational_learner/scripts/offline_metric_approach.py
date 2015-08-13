@@ -152,7 +152,7 @@ class OfflineMetricApproach(object):
             #    print cnt, log['displacement_pose_ratio'], \
             #             log['trajectory_displacement']
 
-            if self.vis: print log['displacement_pose_ratio'], self.filter_threshold
+            #if self.vis: print log['displacement_pose_ratio'], self.filter_threshold
             test1 = log['displacement_pose_ratio'] < self.filter_threshold
             test2 = log['trajectory_displacement'] < 1.0 #F1 distance threshold
             #test2 = log['trajectory_displacement'] < 0.4 #F2 distance threshold
@@ -238,8 +238,8 @@ def query_database_for_uuids():
         metric._retrieve_trajectories(date_query)
         metric._construct_from_people_trajectory()
 
-        if metric.vis: metric.query_and_visualise()
-        else: print "Number of accepted trajs = %s" % len(metric.uuids)
+        #if metric.vis: metric.query_and_visualise()
+        #else: print "Number of accepted trajs = %s" % len(metric.uuids)
 
         resutls_of_filtering.append((metric.trajs.count(), len(metric.uuids), len(metric.removed_ids)))
 
@@ -261,7 +261,10 @@ if __name__ == "__main__":
     list_of_uuids = query_database_for_uuids()
 
     query = ot.make_query(list_of_uuids)
-    q = ot.query_trajectories(query=query, vis=True)
+    q = ot.query_trajectories(query=query, vis=False)
     q.get_poses()
 
-    print len(q.traj.keys())
+    print len(q.trajs.keys())
+
+    file = '/home/strands/STRANDS/TESTING/offline_UUIDS_to_include_in_metric'
+    pickle.dump(q, open(file, "w"))
