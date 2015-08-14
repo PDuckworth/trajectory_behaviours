@@ -3,22 +3,23 @@
 """Use the same trajectories as the qualitative approach, and
 attempt to fit a fully metric EM learning approach"""
 
-
-
-import rospy
 import os, sys
-import pymongo
 import cPickle as pickle
 import datetime, time
 import numpy as np
-from sklearn import mixture
-#import matplotlib
-#matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 
 
-def load_data():
+def load_data(file, vis=None):
+    #Split data by region and pickle
+    with open(file, "rb") as f:
+        data = pickle.load(f)
+    print len(data)
+    if vis:
+        for cnt, (uuid, poses) in enumerate(data.items()):
+            print "%s: %s Poses: %s" % (cnt, uuid, len(poses))
 
+    return
 
 def Estep():
     """returns matrix of Expected values, shape (NxM) = (#of trajectories, #of motion behaviours)
@@ -30,13 +31,13 @@ def Mstep():
     """
 
 
+
 if __name__ == "__main__":
 
     file = '/home/strands/STRANDS/TESTING/offline_UUIDS_to_include_in_metric_roi_1'
+    #Get data
+    data = load_data(file, vis=True)
 
-    #Split data by region and pickle
-    with open(file, "rb") as f:
-        r1 = pickle.load(f)
-    print len(r1)
-    for cnt, (uuid, poses) in enumerate(r1.items()):
-        print "%s: %s Poses: %s" % (cnt, uuid, len(poses))
+    #Fix the len`
+
+    #EM iterations
