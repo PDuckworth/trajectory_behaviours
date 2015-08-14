@@ -1,7 +1,11 @@
 #!/usr/bin/env python
 
+<<<<<<< HEAD
 """Obtain the same trajectories as the qualitative approach, and
 attempt to fit a fully metric EM learning approach"""
+=======
+"""Obtain the same trajectories as the qualitative approach"""
+>>>>>>> 3391152... started metric EM alg
 
 __author__      = "Paul Duckworth"
 __copyright__   = "Copyright 2015, University of Leeds"
@@ -258,13 +262,47 @@ def query_database_for_uuids():
 if __name__ == "__main__":
     rospy.init_node('metric_approach')
 
-    list_of_uuids = query_database_for_uuids()
+    file = '/home/strands/STRANDS/TESTING/offline_UUIDS_to_include_in_metric'
+    roi_1_file = '/home/strands/STRANDS/TESTING/offline_UUIDS_to_include_in_metric_roi_1'
 
+    #Get data from mongo:
+    list_of_uuids = query_database_for_uuids()
     query = ot.make_query(list_of_uuids)
     q = ot.query_trajectories(query=query, vis=False)
     q.get_poses()
+    print len(q.trajs.keys())
+    pickle.dump(q, open(file, "w"))
 
+
+    #Split data by region and pickle
+    with open(file, "rb") as f:
+        q = pickle.load(f)
     print len(q.trajs.keys())
 
-    file = '/home/strands/STRANDS/TESTING/offline_UUIDS_to_include_in_metric'
-    pickle.dump(q, open(file, "w"))
+    soma_map = "g4s"
+    soma_config = "g4s_novelty"
+    region_uuids = {}
+
+    gs = GeoSpatialStoreProxy('geospatial_store','soma')
+    for cnt, (uuid, poses) in enumerate(q.trajs.items()):
+
+        #print poses
+        roi = gs.trajectory_roi(uuid, poses, soma_map, soma_config)
+
+        print "%s: %s ROI: %s" % (cnt, uuid, roi)
+        if roi not in region_uuids: region_uuids[roi] = {}
+        region_uuids[roi][uuid] = poses
+
+    print region_uuids.keys()
+
+    for k, v in region_uuids.items():
+        print k, len(v)
+
+    pickle.dump(region_uuids['1'], open(roi_1_file, "w"))
+
+    #Split data by region and pickle
+    with open(roi_1_file, "rb") as f:
+        r1 = pickle.load(f)
+    print len(r1)
+    for cnt, (uuid, poses) in enumerate(r1.items()):
+        print "%s: %s Poses: %s" % (cnt, uuid, len(poses))
