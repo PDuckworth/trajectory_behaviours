@@ -29,15 +29,13 @@ def load_data(file, vis=None):
 def fix_data_length(data, max_number_of_poses=None, file=None):
     if max_number_of_poses is not None:
 
-        new_uuids, new_poses = [], []
+        new_data = {}
         for uuid, poses in data.items():
-            diff =  max_number_of_poses - len(poses)
+            diff = max_number_of_poses - len(poses)
             new_poses = [poses[-1]]*diff
             poses.extend(new_poses)
-            new_uuids.append(uuid)
-            new_poses.append(poses)
+            new_data[uuid] = poses
 
-        new_data = (new_uuids, new_poses)
         if file is not None:
             pickle.dump(new_data, open(file, "wb"))
             print "saved: %s" %file
@@ -111,6 +109,27 @@ def Mstep(data, E_mat, params):
     return mu
 
 
+def discretise_data(data, bin_size):
+
+    data_ret = {"x":[], "y":[], "angles":[], "velocities":[]}
+    print "number of subject ids: ", len(data)
+
+    discretised_data = {}
+    for cnt, (uuid, poses) in enumerate(data.items()):
+
+        xs, ys, angles, velocities = [], [], [], []   #valid x and y's with positive velocity
+        print cnt, uuid
+
+        p = []
+        for x_, y_, z_ in poses:
+
+            x = int(x_ / float(bin_size))
+            y = int(y_ / float(bin_size))
+            p.append((x, y))
+
+        discretised_data[uuid] = p
+    return discretised_data
+
 if __name__ == "__main__":
 
     file = '/home/strands/STRANDS/TESTING/offline_UUIDS_to_include_in_metric_roi_1'
@@ -119,20 +138,31 @@ if __name__ == "__main__":
 
     #Fix the len of all poses:
     #file = '/home/strands/STRANDS/TESTING/metric_uuid_poses_append.p'
-    new_data = data = fix_data_length(data, max_number_of_poses)
-    """Note: new_data is now a tuple of two lists. uuids and poses """
+    extended_data = fix_data_length(data, max_number_of_poses)
+
+    #Discretise data
+    print "discretising data..."
+    discretised_data = discretise_data(data=extended_data, bin_size=1)
+
 
     #EM iterations
-    num_of_motions = 10                         #Setting M = 10 (for now)
-    num_of_trajs = len(new_data[0])             #This is N
-    num_of_timepoints = max_number_of_poses     #This is T
+    num_of_motions = 10                                             #Setting M = 10 (for now)
+    num_of_trajs = len(discretised_data.keys())                     #This is N
+    num_of_timepoints = max_number_of_poses                         #This is T
 
+    num_of_em_iterations = 3
 
     params = (num_of_motions, num_of_trajs, num_of_timepoints)
+    for i in xrange(0, num_of_em_iterations):
 
-    #initialise E step first - create a unimodal dist for each trajectory over all motion patterns
-    E_mat = E_init_step(data, params)
-    print E_mat
+        if i==0:
+            #initialise E step first - create a unimodal dist for each trajectory over all motion patterns
+            E_mat = E_init_step(discretised_data, params)
+            print E_mat
+        else:
 
-    #Do the M step
-    mu = Mstep(new_data, E_mat, params)
+            #Do the M step
+            mu = Mstep(new_data, E_mat, params)
+
+            #Do the E step
+            E_mat = Estep(discretised_data, params)
