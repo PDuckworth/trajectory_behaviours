@@ -1,11 +1,5 @@
 #!/usr/bin/env python
-
-<<<<<<< HEAD
-"""Obtain the same trajectories as the qualitative approach, and
-attempt to fit a fully metric EM learning approach"""
-=======
 """Obtain the same trajectories as the qualitative approach"""
->>>>>>> 3391152... started metric EM alg
 
 __author__      = "Paul Duckworth"
 __copyright__   = "Copyright 2015, University of Leeds"

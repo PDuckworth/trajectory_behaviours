@@ -194,7 +194,7 @@ if __name__ == "__main__":
 
     st_0 = time.time()
     vis=False
-    episode_store = 'episodes_f1_multi'
+    episode_store = 'episodes_f1_multi_new'
     oe = OfflineEpisodes(vis, episode_store)
 
     resutls_of_filtering = []
@@ -216,6 +216,8 @@ if __name__ == "__main__":
     #oe.learn_threshold_from_first_days(t2_st)
 
     loops = days*(24/float(hrs))
+    loops = 1
+
     for i in range(int(loops)):
 
         #Don't keep accumulating the kept/rejected ids - used for vis

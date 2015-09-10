@@ -19,9 +19,9 @@ from relational_learner.learningArea import Learning
 import relational_learner.obtain_trajectories as ot
 
 import matplotlib.pyplot as plt
-from sklearn.metrics import (precision_score, recall_score, f1_score, classification_report)
+from sklearn.metrics import (accuracy_score, precision_score, recall_score, f1_score, classification_report)
 
-def kmeans_test_set(smartThing, iter, vis=False, publish=None):
+def kmeans_test_set(smartThing, scores, iter=None, vis=False, publish=None):
     """Test a bunch of histograms against the learnt Kmeans model"""
 
     estimator = smartThing.methods["kmeans"]
@@ -30,7 +30,8 @@ def kmeans_test_set(smartThing, iter, vis=False, publish=None):
 
     #Iterate over the split-trajectories. To predict future qualitative movements
     if iter:
-        k_means_iterate_over_examples(smartThing, publish, vis)
+        cluster_scores = k_means_iterate_over_examples(smartThing, scores, publish, vis)
+        return cluster_scores
     else:
         for uuid, test_histogram in smartThing.X_test.items():
 
@@ -49,20 +50,15 @@ def kmeans_test_set(smartThing, iter, vis=False, publish=None):
         return test_set_distances, (novel_uuids, not_novel)
 
 
-def k_means_iterate_over_examples(smartThing, publishers, vis=False):
+def k_means_iterate_over_examples(smartThing, cluster_scores, publishers, vis=False):
 
     estimator = smartThing.methods["kmeans"]
-    pca = smartThing.methods["pca"]
-    print pca.n_components
-    sys.exit(1)
+    #pca = smartThing.methods["pca"]
 
     code_book_hashes = smartThing.code_book_hashes  #list of hashes (used for histograms)
     code_book = smartThing.code_book    #dictionary[hash] = graph
 
-    code_book_hashes = pca.transform(code_book_hashes)[0]
-    print len(code_book_hashes)
-    print code_book_hashes[0]
-
+    #code_book_hashes = pca.transform(code_book_hashes)[0]
     rospy.loginfo('Testing sequences and comparing with complete trajectories...')
     print len(code_book_hashes)
 
@@ -94,33 +90,41 @@ def k_means_iterate_over_examples(smartThing, publishers, vis=False):
     qsrs.get_graph_clusters_from_kmeans(estimator, code_book_hashes, code_book)
     print "Created an Occupency Grid for clusters: ", qsrs.cluster_occu.keys()
 
+    #vis=True
     if vis:
-        visualise_clusters(qsrs, publishers, smartThing.cluster_trajs) #Currently all traj's belonging to cluster in this list
+        visualise_clusters(qsrs, publishers, smartThing.cluster_trajs_filtered) #Currently all traj's belonging to cluster in this list
 
     #6. Test:
     rospy.loginfo('Testing all the sequences of trajectories (takes a while...)')
 
+    #file_ = os.path.join('/home/strands/STRANDS/' + 'TESTING/roi_1_dict_uuids.p')
+    #uuid_weeks = pickle.load(open(file_, "r"))
+    #labels = ['week0', 'week1', 'week2', 'week3', 'week4', 'week5']
+    #test_uuids = uuid_weeks[labels[test_week]]
+    #print "Implementing Cross Validation on the 6 weeks of data"
+
     collect_seq_histograms={}
+    print "length of X_test", len(smartThing.X_test.keys())
+
     for uuid_seq_string, histogram in smartThing.X_test.items():
         if "_test_seq_" not in uuid_seq_string: continue
         uuid, seq = uuid_seq_string.split('_')[0], uuid_seq_string.split('_')[3]
+        #print uuid, seq
 
         if uuid not in collect_seq_histograms: collect_seq_histograms[uuid] = {}
 
         collect_seq_histograms[uuid][int(seq)] = histogram
         #pca.transform(histogram)[0]
 
-
     """Two scores:
     #1. How good is the prediction on partial trajectories. Does seq match seq_n's prediction.
     #2. How good is the prediction of future trajectories. This is the occupancygrid scores summed for future.
     """
 
-    cluster_scores = {}
     cnt = 0
     for uuid, sequence_preds in collect_seq_histograms.items():
         cnt+=1
-        print uuid
+        #print uuid
         cluster_scores[uuid] = {}
 
         #1. Get trajectory from mongo
@@ -180,10 +184,9 @@ def k_means_iterate_over_examples(smartThing, publishers, vis=False):
 
         if vis: print cluster_scores[uuid]
 
-    name = 'cluster_scores_multi.p'
-    file = '/home/strands/STRANDS/TESTING/' + name
-    pickle.dump(cluster_scores, open(file, "w"))
-    rospy.loginfo("Finished generating scores (and dumped them in TESTING/%s)" %name)
+    print "length of cluster_scores = ", len(cluster_scores.keys())
+    #raw_input("check uuids")
+    return cluster_scores
 
     """
     MULTIPLE "SCORES"?
@@ -288,9 +291,10 @@ def plot_results(results, plot):
     rospy.loginfo('Getting Results...')
 
     (y_pred, y_true, scores) = results
-    p, r, f1, avg_scores = [], [], [], []
+    a, p, r, f1, avg_scores = [], [], [], [], []
 
     for percent in xrange(10, 120, 10):
+        a.append(accuracy_score(y_true[percent], y_pred[percent]))
         p.append(precision_score(y_true[percent], y_pred[percent]))
         r.append(recall_score(y_true[percent], y_pred[percent]))
         f1.append(f1_score(y_true[percent], y_pred[percent]))
@@ -306,6 +310,7 @@ def plot_results(results, plot):
 
     if plot:
         x = range(10, 120, 10)
+        generate_fig(x, p, "Accuracy", 0.1)
         generate_fig(x, p, "Precision", 0.1)
         generate_fig(x, r, "Recall", 0.1)
         generate_fig(x, f1, "F1 Score", 0.1)
@@ -314,8 +319,6 @@ def plot_results(results, plot):
         generate_fig(x, avg_scores, "Future Prediction Score (avg)", 10)
 
         plt.show()
-
-
 
 if __name__ == "__main__":
     rospy.init_node('TestingKmeans')
@@ -327,12 +330,15 @@ if __name__ == "__main__":
     parser.add_argument("-v", "--vis_pred", type=int, help="visualise predictions in rviz", default=0)
     args = parser.parse_args()
 
-    filename = os.path.join(data_dir + 'learning/roi_1_smartThing.p')
-    smartThing=Learning(load_from_file=filename)
+    if args.test != "Eval":
 
-    pub_g = rospy.Publisher('/trajectory_behaviours/grid', GridCells, latch=True, queue_size=0)
-    pub_o = rospy.Publisher('/trajectory_behaviours/occu', OccupancyGrid, latch=True, queue_size=0)
-    publishers = (pub_g, pub_o)
+        filename = os.path.join(data_dir + 'learning/roi_1_smartThing.p')
+        smartThing=Learning(load_from_file=filename)
+
+        pub_g = rospy.Publisher('/trajectory_behaviours/grid', GridCells, latch=True, queue_size=0)
+        pub_o = rospy.Publisher('/trajectory_behaviours/occu', OccupancyGrid, latch=True, queue_size=0)
+        publishers = (pub_g, pub_o)
+
 
     if args.test == "TestSeq":
         kmeans_test_set(smartThing, iter=True, vis= bool(args.vis_pred), publish=publishers)
@@ -342,7 +348,7 @@ if __name__ == "__main__":
                         vis= bool(args.vis_pred), publish=publishers)
 
     elif args.test == "Eval":
-        test_scores = '/home/strands/STRANDS/TESTING/cluster_scores_multi.p'
+        test_scores = '/home/strands/STRANDS/TESTING/all_cluster_scores_comb_qsrs.p'
         print test_scores
         with open(test_scores, "rb") as f:
             scores = pickle.load(f)

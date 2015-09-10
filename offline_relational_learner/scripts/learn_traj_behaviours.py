@@ -127,8 +127,7 @@ def run_all(plotting, episode_store, learn_methods, qsr_type, publishers):
 
     all = len(week0_uuids)+len(week1_uuids)+len(week2_uuids)+len(week3_uuids)+\
         len(week4_uuids)+len(week5_uuids)
-    print "%s data queried from %s" % (all, episode_store)
-
+    print "\n%s data queried from %s" % (all, episode_store)
 
     # *******************************************************************#
     #                  Obtain Episodes in ROI                            #
@@ -156,18 +155,33 @@ def run_all(plotting, episode_store, learn_methods, qsr_type, publishers):
             elif i['uuid'] in week4_uuids: region_data_by_week[roi]["wk4"].append(i['uuid'])
             elif i['uuid'] in week5_uuids: region_data_by_week[roi]["wk5"].append(i['uuid'])
 
+
+        ##"""SAVE DATA FOR LATER"""##
         #for k,v in region_data_by_week[roi].items(): print k, len(v)
         r = region_data_by_week[roi]
-        keep_sample = set(r["wk1"])^ set(r["wk2"])^ set(r["wk3"])^ set(r["wk4"]) ^ set(r["wk5"])
-        #keep_sample = set(r["wk1"]) ^ set(r["wk5"])
-        print "Keeping sample from 4 Weeks and week 5: %s" % len(keep_sample)
+
+        #keep_samples = set(r["wk3"]) ^ set(r["wk5"])
+        keep_samples = set(r["wk0"])^set(r["wk1"])^ set(r["wk2"])^ set(r["wk3"])^ set(r["wk4"]) ^ set(r["wk5"])
+        #dict_samples = {"week0":set(r["wk0"]), "week1":set(r["wk1"]), "week2":set(r["wk2"]),
+            #"week3":set(r["wk3"]),"week4":set(r["wk4"]), "week5":set(r["wk5"])}
+        ##To create the split-trajectories (by seq) used for the trajectory predictions
+        #pickle.dump(list(keep_samples), open('/home/strands/STRANDS/TESTING/roi_1_all_uuids.p', "w"))
+        #pickle.dump(dict_samples, open('/home/strands/STRANDS/TESTING/roi_1_dict_uuids.p', "w"))
+
+        print "Cross Validation: keep all 6 weeks = %s" % len(keep_samples)
+        print "  week 0 = %s, %s" % (len(week0_uuids), len(r["wk0"]))
+        print "  week 1 = %s, %s" % (len(week1_uuids), len(r["wk1"]))
+        print "  week 2 = %s, %s" % (len(week2_uuids), len(r["wk2"]))
+        print "  week 3 = %s, %s" % (len(week3_uuids), len(r["wk3"]))
+        print "  week 4 = %s, %s" % (len(week4_uuids), len(r["wk4"]))
+        print "  week 5 = %s, %s" % (len(week5_uuids), len(r["wk5"]))
 
         all_episodes = {}
         trajectory_times = []
         cnt=0
         res = db.find(query)
         for cnt, trajectory in enumerate(res):
-            if trajectory["uuid"] not in keep_sample: continue
+            if trajectory["uuid"] not in keep_samples: continue
 
             all_episodes[trajectory["uuid"]] = Mongodb_to_list(trajectory["episodes"])
             cnt+=1
@@ -202,38 +216,70 @@ def run_all(plotting, episode_store, learn_methods, qsr_type, publishers):
 
         print "code_book length = ", len(code_book_hashes)
         print "total number of datapoints = ", len(X_source.keys())
-        region_test_set = set(X_source.keys()) & set(week5_uuids)
-        print "size of train set %s in region: %s" % ( len(X_source.keys()) - len(region_test_set), roi)
-        print "size of test set %s in region: %s" % (len(region_test_set), roi)
 
         # **************************************************************#
-        #                    Learn a Clustering model                   #
+        #                       CROSS VALIDATION                        #
         # **************************************************************#
-        rospy.loginfo('Learning...')
-        params, tag = gh.AG_setup(input_data, date, str_roi)
+        cv_weeks = [0,1,2,3,4,5]
+        #cv_weeks = [4,5]
+        cluster_scores={}
+        #cv_weeks = [5]
+        uuid_weeks = [week0_uuids, week1_uuids, week2_uuids, week3_uuids, week4_uuids, week5_uuids]
+        for test_week in cv_weeks:
 
-        smartThing = Learning(f_space=feature_space, roi=str(roi), vis=plotting)
+            print "CV week %s is test week" % test_week
+            region_test_set = list( set(X_source.keys()) & set(uuid_weeks[test_week]))
 
-        smartThing.split_data_on_test_set(scale=True, test_set=list(region_test_set))
-        # To create the split-trajectories (by seq) used for the trajectory predictions
-        #pickle.dump(list(region_test_set), open('/home/strands/STRANDS/TESTING/roi_1_week5_uuids.p', "w"))
+            region_train_set = []
+            for i in X_source.keys():
+                if "_test_seq_" in i: continue #Only use the full trajectories (without _test_seq_) to train Kmeans
+                if i not in uuid_weeks[test_week]: region_train_set.append(i)
 
-        pca, scores = smartThing.pca_investigate_variables(apply = True)
+            X_source_cv = {}
+            for uuid in region_train_set:
+                X_source_cv[uuid] = X_source[uuid]
+            for uuid in region_test_set:
+                X_source_cv[uuid] = X_source[uuid]
 
-        # **************************************************************#
-        #                           Learn KMEANS                        #
-        # **************************************************************#
-        if "kmeans" in methods:
-            rospy.loginfo('Good ol k-Means')
-            smartThing.kmeans()
-            smartThing.cluster_radius(method="kmeans")
+            print "  size of train set %s in region: %s" % (len(region_train_set), roi)
+            print "  size of test set %s in region: %s" % (len(region_test_set), roi)
+            print "  size of feature space %s in region: %s" % (len(X_source_cv.keys()), roi)
 
-            rospy.loginfo('Testing k-Means')
-            smartThing.save(learning_area)
-            sys.exit(1)
+            # **************************************************************#
+            #                    Learn a Clustering model                   #
+            # **************************************************************#
+            rospy.loginfo('Learning...')
+            params, tag = gh.AG_setup(input_data, date, str_roi)
 
-            kmeans_test_set(smartThing, iter=True, publish=publishers)
-            if plotting: visualise_clusters(smartThing, novelty_info)
+            feature_space = (code_book_hashes, code_book, X_source_cv)
+            smartThing = Learning(f_space=feature_space, roi=str(roi), vis=plotting)
+
+            smartThing.split_data_on_test_set(scale=True, test_set=region_test_set, feat_select=None)
+            #pca, scores = smartThing.pca_investigate_variables(apply = True)
+
+            # **************************************************************#
+            #                           Learn KMEANS                        #
+            # **************************************************************#
+            if "kmeans" in methods:
+                rospy.loginfo('Good ol k-Means')
+                smartThing.kmeans()
+                smartThing.cluster_radius(method="kmeans")
+
+                rospy.loginfo('Testing k-Means')
+                #smartThing.save(learning_area)
+
+                plotting=False
+                if plotting: visualise_clusters(smartThing)
+
+                cluster_scores = kmeans_test_set(smartThing, cluster_scores, iter=True, publish=publishers)
+
+        name = 'all_cluster_scores_comb_qsrs.p'
+        file = '/home/strands/STRANDS/TESTING/' + name
+        pickle.dump(cluster_scores, open(file, "w"))
+        rospy.loginfo("Finished generating scores (and dumped them in TESTING/%s)" %name)
+
+        evaluate_predictions(cluster_scores, False, False, True)
+        sys.exit(1)
 
         # **************************************************************#
         #                 Learn a AffinityPropagation                   #
@@ -262,9 +308,10 @@ def run_all(plotting, episode_store, learn_methods, qsr_type, publishers):
 
 
 def visualise_clusters(smartThing, novelty_info=[]):
-    N = max(smartThing.show_in_rviz.keys())
+
+    N = max(smartThing.cluster_trajs.keys())
     print "visualising first cluster: 0"
-    for cnt, (label, uuids_list) in enumerate(smartThing.show_in_rviz.items()):
+    for cnt, (label, uuids_list) in enumerate(smartThing.cluster_trajs_filtered.items()):
         query = ot.make_query(uuids_list)
         q = ot.query_trajectories(query, True, "direction_red_green")
         if cnt < N: raw_input("\npress enter for next cluster: %i" % (cnt+1))
@@ -298,7 +345,6 @@ if __name__ == "__main__":
     print "message store = ", args.episode_store
     print "learning methods = ", args.learn_methods
     print "qsr type = ", args.qsr_type
-
 
     pub_g = rospy.Publisher('/trajectory_behaviours/grid', GridCells, latch=True, queue_size=0)
     pub_o = rospy.Publisher('/trajectory_behaviours/occu', OccupancyGrid, latch=True, queue_size=0)

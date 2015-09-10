@@ -64,7 +64,7 @@ def get_mini_batch_trajs(X_test, vis=False):
 
 def get_episodes_for_mini_batches(mini_batches):
 
-    OE = OfflineEpisodes(msg_store='episodes_f1_multi_seq_test')
+    OE = OfflineEpisodes(msg_store='episodes_f1_multi_seq_all_weeks')
 
     for uuid, list_of_trajs in mini_batches.items():
         for cnt, traj in enumerate(list_of_trajs):
@@ -80,7 +80,7 @@ if __name__ == "__main__":
     rospy.init_node('splitting_trajectories')
     plotting=True
     data_dir = '/home/strands/STRANDS/'
-    file_ = os.path.join(data_dir + 'TESTING/roi_1_week5_uuids.p')
+    file_ = os.path.join(data_dir + 'TESTING/roi_1_all_uuids.p')
     print file_
     test_set = pickle.load(open(file_, "r"))
 

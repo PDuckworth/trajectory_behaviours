@@ -137,6 +137,10 @@ class qsr_param_masks(object):
         self.binary_map = [1 if d not in [-1, 100] else 0 for d in map.data]
         self.outside_map = [-1 if d in [-1, 100] else 0 for d in map.data]
 
+        print "binary map: ", len(self.binary_map), type(self.binary_map)
+        file = '/home/strands/STRANDS/TESTING/binary_map.p'
+        pickle.dump(self.binary_map, open(file, "w"))
+
     def get_qsr_masks(self):
         """For each QSR value, create a (cell x cells) matrix (binary mask) to apply to the occupancygrid"""
         for i in xrange(0,len(self.sorted_params)):
@@ -198,6 +202,12 @@ class qsr_param_masks(object):
 
     def get_graph_clusters_from_kmeans(self, estimator, code_book_hashes, code_book):
 
+        if type(self.binary_map) != 'list':
+            print "load binary map"
+            file = '/home/strands/STRANDS/TESTING/binary_map.p'
+            with open(file, "rb") as f:
+                self.binary_map = pickle.load(f)
+
         graphlet_centers = {}
         qsr_cluster_masks = {}
 
@@ -230,6 +240,8 @@ class qsr_param_masks(object):
 
             t = time.time()
             #4. appy a binary map mask - will keep the occupancygrid inside the map confines
+            print "cluster:", cnt, type(self.binary_map), len(self.binary_map), type(occu.occupancygrid.data), len(occu.occupancygrid.data)
+
             occu.occupancygrid.data = [a*b for a,b in zip(self.binary_map, occu.occupancygrid.data)]
             self.cluster_occu[clstr_id] = occu
             t4 += time.time()-t
@@ -293,11 +305,10 @@ class qsr_param_masks(object):
                     key = (object['obj_type'], self.objects[object['obj_type']])
 
                     for cnt, spatial in enumerate(object.neighbors()):
-                        #if cnt>0:
+                        #if cnt is 0: continue
                         if key not in add_masks: add_masks[key] = []
                         tuple = (spatial['name'], weight)
                         add_masks[key].append(tuple)
-
         return add_masks
 
     def generate_cluster_occupencyGrid(self, cluster='', add_masks={}):
