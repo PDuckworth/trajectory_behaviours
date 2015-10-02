@@ -163,7 +163,7 @@ class QueryClient():
         self.ser = rospy.ServiceProxy(service_name, TrajectoryQuery)
 
     def query(self, query, vis = False, vis_option = "random"):
-        print "visualise colour option:", vis_option
+        if vis: print "visualise colour option:", vis_option
         try:
             req = TrajectoryQueryRequest()
             req.query = query
@@ -188,7 +188,9 @@ class query_trajectories():
         if self.res.error:
             rospy.logerr("Result: error: %s (Invalid query: %s)" % (self.res.error, query))
         else:
-            print "Query returned: %s trajectories. " % repr(len(self.res.trajectories.trajectories))
+            if vis:
+                print "Query returned: %s trajectories. " % repr(len(self.res.trajectories.trajectories))
+
 
     def get_best_trajectories(self, requested=0.1):
         print "Getting UUID and Pose info"

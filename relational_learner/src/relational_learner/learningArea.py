@@ -24,6 +24,7 @@ from sklearn.feature_extraction.text import TfidfVectorizer
 #from sklearn.cluster import AgglomerativeClustering
 from sklearn.decomposition import PCA
 from sklearn.preprocessing import StandardScaler
+from sklearn.feature_selection import VarianceThreshold, SelectPercentile, f_classif
 
 from tf.transformations import euler_from_quaternion
 from mongodb_store.message_store import MessageStoreProxy
@@ -227,13 +228,16 @@ class Learning():
         return
 
 
-    def split_data_on_test_set(self, scale=False, test_set=None):
+    def split_data_on_test_set(self, scale=False, test_set=None, feat_select=None):
         rospy.loginfo('Split out Test set...')
         if scale:
             for k, v in self.feature_space.items():
                 s = np.sum(v)
-                foo = [i/float(s) for i in v]
-                self.feature_space[k] = foo
+                if s > 0:
+                    foo = [i/float(s) for i in v]
+                    self.feature_space[k] = foo
+                else:
+                    self.feature_space[k] = v
 
         if test_set is None:
             self.data = np.array(self.feature_space.values())
@@ -248,14 +252,27 @@ class Learning():
                     self.X_uuids.append(uuid)
                     data_.append(feature_vec)
             self.data = np.array(data_)
+        """
+        if feat_select is not None:
+            #sel = VarianceThreshold(threshold=(.2 * (1 - .2)))
+            selector = SelectPercentile(f_classif, percentile=10)
+            data_fs = selector.fit_transform(self.data)
 
+            X_test_fs = {}
+            for uuid, features in self.X_test.items():
+                X_test_fs[uuid] = selector.transform(features)
+
+            print len(data_fs), len(self.data[0]), len(data_fs[0]), len(self.X_test[uuid]), len(X_test_fs[uuid])
+            self.data = data_fs
+            self.X_test = X_test_fs
+        """
 
     def kmeans(self, k=None):
         n_samples, n_features = self.data.shape
 
         # determine your range of K
         if k == None:
-            k_range = range(5,20)
+            k_range = range(6,20)
         else:
             k_range = [k]
 

@@ -21,22 +21,14 @@ import relational_learner.obtain_trajectories as ot
 import matplotlib.pyplot as plt
 from sklearn.metrics import (accuracy_score, precision_score, recall_score, f1_score, classification_report)
 
-def kmeans_test_set(smartThing, scores, iter=None, vis=False, publish=None):
+def kmeans_test_set(smartThing, vis=False, publish=None):
     """Test a bunch of histograms against the learnt Kmeans model"""
-
-    estimator = smartThing.methods["kmeans"]
-    test_set_distances = []
-    novel_uuids, not_novel = [], []
-
-    #Iterate over the split-trajectories. To predict future qualitative movements
-    if iter:
-        cluster_scores = k_means_iterate_over_examples(smartThing, scores, publish, vis)
-        return cluster_scores
+    """
     else:
         for uuid, test_histogram in smartThing.X_test.items():
-
             closest_cluster_id = estimator.predict(test_histogram)
             closest_cluster = estimator.cluster_centers_[closest_cluster_id]
+
             dst = distance.euclidean(test_histogram, closest_cluster)
             test_set_distances.append(dst)
 
@@ -48,9 +40,10 @@ def kmeans_test_set(smartThing, scores, iter=None, vis=False, publish=None):
 
         print "Inertia of Test Set = %s\n" % sum(test_set_distances)
         return test_set_distances, (novel_uuids, not_novel)
+    """
 
 
-def k_means_iterate_over_examples(smartThing, cluster_scores, publishers, vis=False):
+def get_cluster_occu_grids(smartThing, publishers, vis=False):
 
     estimator = smartThing.methods["kmeans"]
     #pca = smartThing.methods["pca"]
@@ -90,42 +83,89 @@ def k_means_iterate_over_examples(smartThing, cluster_scores, publishers, vis=Fa
     qsrs.get_graph_clusters_from_kmeans(estimator, code_book_hashes, code_book)
     print "Created an Occupency Grid for clusters: ", qsrs.cluster_occu.keys()
 
-    #vis=True
+    vis=False
     if vis:
-        visualise_clusters(qsrs, publishers, smartThing.cluster_trajs_filtered) #Currently all traj's belonging to cluster in this list
+        visualise_clusters(qsrs, publishers, smartThing.cluster_trajs_filtered) #Currently (not) all traj's belonging to cluster in this list
+
+    return qsrs
+
+
+def test_trajectories_against_occu_grids(smartThing, qsrs, vis=False):
+
+    rospy.loginfo('Testing trajectories against each occu grid (theta)')
+    print "length of X_test", len(smartThing.X_test.keys())
+    estimator = smartThing.methods["kmeans"]
+
+    collect_seq_histograms={}
+    for uuid_seq_string, histogram in smartThing.X_test.items():
+        if "_test_seq_" in uuid_seq_string: continue #Only test complete trajectories
+        uuid = uuid_seq_string
+        collect_seq_histograms[uuid] = histogram
+
+    all_uuids, predictions, theta_comparisons= [], [], []
+    for uuid, histogram in collect_seq_histograms.items():
+        #print uuid
+
+        #1. Get trajectory from mongo
+        query = '''{"uuid" : "%s" }''' % uuid
+        q = ot.query_trajectories(query, vis)
+        q.get_poses()
+
+        #Get the occu positions from the xy map poses:
+        occu_pts = [vis_tools.xy_to_occu(x,y) for x,y,z in q.trajs[uuid]]
+
+        pred_cluster_id = estimator.predict(np.array(histogram))[0]
+        #print "predicted cluster: ", pred_cluster_id
+
+        results=[]
+        inside_map = True
+        #print qsrs.cluster_occu.keys()
+        #for clst, qsr_occu in qsrs.cluster_occu.items():
+        for clst in xrange(len(qsrs.cluster_occu.keys())):
+            clst_str = "%s" % clst
+            qsr_occu = qsrs.cluster_occu[clst_str]
+
+            if inside_map == False: continue
+            occu_values = [qsr_occu.occupancygrid.data[pt] for pt in occu_pts]
+            #print "clst: %s, score %s, prediction: %s" %(clst, sum(occu_values)/float(len(occu_values)), pred_cluster_id)
+            avg = sum(occu_values)/float(len(occu_values))
+
+            if avg == -1.0:
+                inside_map = False
+            else:
+                results.append(avg)
+
+        if inside_map:
+            all_uuids.append(uuid)
+            theta_comparisons.append(results)
+            predictions.append(pred_cluster_id)
+
+    data_structure = {"ids": all_uuids,
+                      "gt" : predictions,
+                      "mk" : theta_comparisons,
+                      "k"  : clst}
+    print "returning: ", len(data_structure["ids"]), " ID predicitions"
+    return data_structure
+
+
+def k_means_test_sequences(smartThing, qsrs, vis=False):
 
     #6. Test:
     rospy.loginfo('Testing all the sequences of trajectories (takes a while...)')
-
-    #file_ = os.path.join('/home/strands/STRANDS/' + 'TESTING/roi_1_dict_uuids.p')
-    #uuid_weeks = pickle.load(open(file_, "r"))
-    #labels = ['week0', 'week1', 'week2', 'week3', 'week4', 'week5']
-    #test_uuids = uuid_weeks[labels[test_week]]
-    #print "Implementing Cross Validation on the 6 weeks of data"
-
-    collect_seq_histograms={}
     print "length of X_test", len(smartThing.X_test.keys())
+    estimator = smartThing.methods["kmeans"]
 
     for uuid_seq_string, histogram in smartThing.X_test.items():
-        if "_test_seq_" not in uuid_seq_string: continue
+        if "_test_seq_" not in uuid_seq_string: continue   #Only use sequence data
         uuid, seq = uuid_seq_string.split('_')[0], uuid_seq_string.split('_')[3]
-        #print uuid, seq
 
         if uuid not in collect_seq_histograms: collect_seq_histograms[uuid] = {}
-
         collect_seq_histograms[uuid][int(seq)] = histogram
-        #pca.transform(histogram)[0]
 
-    """Two scores:
-    #1. How good is the prediction on partial trajectories. Does seq match seq_n's prediction.
-    #2. How good is the prediction of future trajectories. This is the occupancygrid scores summed for future.
-    """
-
-    cnt = 0
+    #For each UUID and list of sequence-prediction:
     for uuid, sequence_preds in collect_seq_histograms.items():
-        cnt+=1
-        #print uuid
         cluster_scores[uuid] = {}
+        all_future_negative = False
 
         #1. Get trajectory from mongo
         query = '''{"uuid" : "%s" }''' % uuid
@@ -138,19 +178,13 @@ def k_means_iterate_over_examples(smartThing, cluster_scores, publishers, vis=Fa
         max_seq = max(sequence_preds.keys())
         batch_size = len(occu_pts)/ float(max_seq)
 
-        all_future_negative = False
         for seq in xrange(1, len(sequence_preds)+1):
-            if all_future_negative is True: continue #All future sequences are all -1 (i.e. outside map region)
-            if seq not in sequence_preds: continue #Some reason dont have traj data for this seq
+            if all_future_negative is True: continue  #All future sequences are all -1 (i.e. outside map region)
+            if seq not in sequence_preds: continue    #Some reason dont have traj data for this seq
 
             next_pose = seq*int(batch_size) + 1
             if vis: print "Seq: %s (of %s). Next pose: %s" % (seq, max_seq, next_pose)
 
-            # Predict a cluster id (for each seq)
-            hist = np.array(sequence_preds[seq])
-            cluster_id = estimator.predict(hist)[0]
-
-            # Take a copy of that cluster's occu map
             qsrs_copy = copy.deepcopy(qsrs.cluster_occu[str(cluster_id)])
             occu_values = [qsrs_copy.occupancygrid.data[pt] for pt in occu_pts]
             #print occu_values
@@ -169,7 +203,6 @@ def k_means_iterate_over_examples(smartThing, cluster_scores, publishers, vis=Fa
             #print sum(occu_values[next_pose:])/float(len(occu_values[next_pose:]))
             if len(non_neg_occu_values) != 0:
                 score = sum(non_neg_occu_values)/float(len(non_neg_occu_values))
-                #print score
             else:
                 all_future_negative = True
 
@@ -182,18 +215,10 @@ def k_means_iterate_over_examples(smartThing, cluster_scores, publishers, vis=Fa
                     else: qsrs_copy.occupancygrid.data[pt] = 0
                 visualise_predictions(qsrs_copy, cluster_id, publishers[1])
 
-        if vis: print cluster_scores[uuid]
+        return cluster_scores
 
-    print "length of cluster_scores = ", len(cluster_scores.keys())
-    #raw_input("check uuids")
-    return cluster_scores
 
-    """
-    MULTIPLE "SCORES"?
-        1. NUMBER OF PREDICTED GRAPHLETS ALSO IN CLUSTER CENTERS?
-        2. NUMBER OF GRAPHLETS IN CLUSTER WHICH ARE IN PREDICTION?
-        3. AMMOUNT THE (predicted) OCCUPANCY GRID OVERLAPS THE FULL TRAJECTORY -> Done
-    """
+
 
 def visualise_predictions(qsrs, id, pub):
     """TECHNIQUES TO IMPOVE VIS:
@@ -211,6 +236,7 @@ def visualise_clusters(qsrs, pub, show_uuids):
     while not rospy.is_shutdown() and cnt==0:
         for cluster in qsrs.cluster_occu:
             print "Cluster: %s" %cluster
+
             query = ot.make_query(show_uuids[cluster])
             q = ot.query_trajectories(query, True)
             qsrs.cluster_occu[cluster].pub_occu(pub[1])
@@ -268,15 +294,17 @@ def generate_fig(x, y, label, yticks):
     percent_map = {10:'<10%',20:'<20%',30:'<30%',40:'<40%',50:'<50%',
                 60:'<60%',70:'<70%',80:'<80%',90:'<90%',100:'<100%',110:'All'}
 
+    #percent_map = {20:'<20%',40:'<40%',60:'<60%',80:'<80%',110:'100%'}
+
     fig = plt.figure()
     ax = fig.add_subplot(111)
     ax.plot(x,y)
     ax.set_ylabel(label)
-    ax.set_xlabel("percentage of trajectory seen")
+    ax.set_xlabel("percentage of trajectory perceived")
     ax.set_xticks(range(10,120, 10))
     ax.set_xticklabels([percent_map[i] for i in range(10,120, 10) ])
     if yticks is 0.1:
-        ax.set_yticks([0,0.1,0.2,0.3,0.4,0.5,0.6,0.7,0.8,0.9,1])
+        ax.set_yticks([0,0.2,0.4,0.6,0.8,1])
     #elif yticks is 10:
     #    ax.set_yticks(range(60,85,5))
 
@@ -310,7 +338,7 @@ def plot_results(results, plot):
 
     if plot:
         x = range(10, 120, 10)
-        generate_fig(x, p, "Accuracy", 0.1)
+        generate_fig(x, a, "Accuracy", 0.1)
         generate_fig(x, p, "Precision", 0.1)
         generate_fig(x, r, "Recall", 0.1)
         generate_fig(x, f1, "F1 Score", 0.1)
@@ -348,7 +376,7 @@ if __name__ == "__main__":
                         vis= bool(args.vis_pred), publish=publishers)
 
     elif args.test == "Eval":
-        test_scores = '/home/strands/STRANDS/TESTING/all_cluster_scores_comb_qsrs.p'
+        test_scores = '/home/strands/STRANDS/TESTING/final_results_removed_graphlets_QDC_only/all_cluster_scores_qdc.p'
         print test_scores
         with open(test_scores, "rb") as f:
             scores = pickle.load(f)

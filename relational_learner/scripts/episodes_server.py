@@ -146,13 +146,14 @@ def handle_episodes(req):
     """3. QSRLib data parser"""
     tq0=time.time()
 
-    (d, c, force_params, da) = util.get_qsr_config()
+    #(d, c, force_params, da) = util.get_qsr_config()
+
     qsr_reader = tdr.Trajectory_Data_Reader(objects=objects, \
                                         trajectories=trajectory_poses, \
                                         objs_to_traj_map = closest_objs_to_trajs, \
                                         roi=roi, vis=visualise_qsrs, \
-                                        current_uuids=current_uuids,
-                                        multi_params = force_params)
+                                        current_uuids=current_uuids)
+                                        #multi_params = force_params)
 
     #tr = qsr_reader.spatial_relations[uuid].trace
     #for i in tr:

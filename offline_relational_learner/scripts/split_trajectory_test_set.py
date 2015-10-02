@@ -64,7 +64,7 @@ def get_mini_batch_trajs(X_test, vis=False):
 
 def get_episodes_for_mini_batches(mini_batches):
 
-    OE = OfflineEpisodes(msg_store='episodes_f1_multi_seq_all_weeks')
+    OE = OfflineEpisodes(msg_store='episodes_f1_dist_seq_all_weeks')
 
     for uuid, list_of_trajs in mini_batches.items():
         for cnt, traj in enumerate(list_of_trajs):
@@ -81,8 +81,8 @@ if __name__ == "__main__":
     plotting=True
     data_dir = '/home/strands/STRANDS/'
     file_ = os.path.join(data_dir + 'TESTING/roi_1_all_uuids.p')
-    print file_
     test_set = pickle.load(open(file_, "r"))
+    print file_, type(test_set), len(test_set)
 
     dict_of_mini_batches = get_mini_batch_trajs(test_set, vis=plotting)
     #print "RETURNS:", dict_of_mini_batches[reduced_test.keys()[0]]

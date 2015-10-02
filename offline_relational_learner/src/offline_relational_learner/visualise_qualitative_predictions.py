@@ -112,7 +112,10 @@ class qsr_param_masks(object):
         (self.data_dir, config_path, qsr_params, date) = util.get_qsr_config()
 
         #Remove this when using only one QSR type
+
+        print qsr_params
         qsr_params = qsr_params[0]
+        print qsr_params
 
         self.qsr = qsr_params[0]
         self.qsr_params = qsr_params[1]
@@ -138,8 +141,8 @@ class qsr_param_masks(object):
         self.outside_map = [-1 if d in [-1, 100] else 0 for d in map.data]
 
         print "binary map: ", len(self.binary_map), type(self.binary_map)
-        file = '/home/strands/STRANDS/TESTING/binary_map.p'
-        pickle.dump(self.binary_map, open(file, "w"))
+        #file = '/home/strands/STRANDS/TESTING/binary_map.p'
+        #pickle.dump(self.binary_map, open(file, "w"))
 
     def get_qsr_masks(self):
         """For each QSR value, create a (cell x cells) matrix (binary mask) to apply to the occupancygrid"""
@@ -202,11 +205,11 @@ class qsr_param_masks(object):
 
     def get_graph_clusters_from_kmeans(self, estimator, code_book_hashes, code_book):
 
-        if type(self.binary_map) != 'list':
+        print type(self.binary_map)
+        if not isinstance(self.binary_map, list):
             print "load binary map"
             file = '/home/strands/STRANDS/TESTING/binary_map.p'
-            with open(file, "rb") as f:
-                self.binary_map = pickle.load(f)
+            self.binary_map = pickle.load(open(file, "rb"))
 
         graphlet_centers = {}
         qsr_cluster_masks = {}
@@ -214,7 +217,9 @@ class qsr_param_masks(object):
         t2, t3, t4, t5 = 0, 0, 0, 0
 
         #cluster_sum = [0]*136
+        #self.dbg = True
         for cnt, clst in enumerate(estimator.cluster_centers_):
+
             #cluster_sum+=clst
             clstr_id = str(cnt)
             list_of_AGs, weights = [], []
@@ -240,7 +245,7 @@ class qsr_param_masks(object):
 
             t = time.time()
             #4. appy a binary map mask - will keep the occupancygrid inside the map confines
-            print "cluster:", cnt, type(self.binary_map), len(self.binary_map), type(occu.occupancygrid.data), len(occu.occupancygrid.data)
+            #print "cluster:", cnt, type(self.binary_map), len(self.binary_map), type(occu.occupancygrid.data), len(occu.occupancygrid.data)
 
             occu.occupancygrid.data = [a*b for a,b in zip(self.binary_map, occu.occupancygrid.data)]
             self.cluster_occu[clstr_id] = occu
@@ -251,12 +256,27 @@ class qsr_param_masks(object):
         self.scale_occupency_grids_globally()
         t5 += time.time()-t
 
+        #Normalise each occu grid between 0-100
+        self.normalise_occu_grids_locally()
+
         if self.dbg:
             print "time2: ", t2
             print "time3: ", t3
             print "time4: ", t4
             print "time5: ", t5
 
+
+    def normalise_occu_grids_locally(self):
+        for cluster_id, occu in self.cluster_occu.items():
+            data = occu.occupancygrid.data
+            min_ = max(data)
+            max_ = min(data)
+
+            new_data = (data - min_) / float((max_ - min_))*-100
+            new_data = [int(i) for i in new_data]
+            remove_outside_map = [a*b for a,b in zip(self.binary_map, new_data)]
+            #print "cluster ", cluster_id, ": ", min(remove_outside_map), max(remove_outside_map)
+            self.cluster_occu[cluster_id].occupancygrid.data = remove_outside_map
 
     def scale_occupency_grids_globally(self):
         """ After we have an occupencygrid for each cluster:
@@ -298,8 +318,7 @@ class qsr_param_masks(object):
                 print [i['obj_type'] for i in ag.object_nodes]
                 print [i['name'] for i in ag.spatial_nodes]
 
-
-            """THINK ABOUT APPLYING THE QSR MASKS WHICH OCCUR IN THE FUTURE (only the second spatial node?)"""
+            """THINK ABOUT APPLYING THE QSR MASKS WHICH OCCUR IN THE FUTURE (only the second spatial node if temp is meets?)"""
             for object in ag.object_nodes:
                 if object['obj_type'] in self.objects.keys():
                     key = (object['obj_type'], self.objects[object['obj_type']])
@@ -326,11 +345,11 @@ class qsr_param_masks(object):
                 if self.dbg: print "Applying %s mask (%s) to %s: (%s)" %(qsr, weight, object, pos)
                 occu.grid.add_object(object, map_xyz)
 
-                #Use this when QSR includes arg_dist_qtcb...
+                """Need this when QSR includes arg_dist_qtcb..."""
                 modified_qsr = qsr[:-2]
                 #modified_qsr = qsr
-                occu.mat = o_utils.addAtPos(occu.mat, self.binary_masks[modified_qsr], pos, \
-                                            weight, add=True, vis=False)#vis=self.dbg)
+
+                occu.mat = o_utils.addAtPos(occu.mat, self.binary_masks[modified_qsr], pos, weight, add=True, vis=False)#vis=self.dbg)
         occu.matrix_to_occu(occu.mat)
         return occu
 

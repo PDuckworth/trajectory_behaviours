@@ -160,13 +160,13 @@ def run_all(plotting, episode_store, learn_methods, qsr_type, publishers):
         #for k,v in region_data_by_week[roi].items(): print k, len(v)
         r = region_data_by_week[roi]
 
-        #keep_samples = set(r["wk3"]) ^ set(r["wk5"])
+        #keep_samples = set(r["wk0"]) ^  set(r["wk1"]) ^  set(r["wk2"]) ^  set(r["wk3"]) ^  set(r["wk3"]) ^set(r["wk5"])
         keep_samples = set(r["wk0"])^set(r["wk1"])^ set(r["wk2"])^ set(r["wk3"])^ set(r["wk4"]) ^ set(r["wk5"])
         #dict_samples = {"week0":set(r["wk0"]), "week1":set(r["wk1"]), "week2":set(r["wk2"]),
-            #"week3":set(r["wk3"]),"week4":set(r["wk4"]), "week5":set(r["wk5"])}
+        #    "week3":set(r["wk3"]),"week4":set(r["wk4"]), "week5":set(r["wk5"])}
         ##To create the split-trajectories (by seq) used for the trajectory predictions
         #pickle.dump(list(keep_samples), open('/home/strands/STRANDS/TESTING/roi_1_all_uuids.p', "w"))
-        #pickle.dump(dict_samples, open('/home/strands/STRANDS/TESTING/roi_1_dict_uuids.p', "w"))
+        ##pickle.dump(dict_samples, open('/home/strands/STRANDS/TESTING/roi_1_dict_uuids.p', "w"))
 
         print "Cross Validation: keep all 6 weeks = %s" % len(keep_samples)
         print "  week 0 = %s, %s" % (len(week0_uuids), len(r["wk0"]))
@@ -220,12 +220,16 @@ def run_all(plotting, episode_store, learn_methods, qsr_type, publishers):
         # **************************************************************#
         #                       CROSS VALIDATION                        #
         # **************************************************************#
-        cv_weeks = [0,1,2,3,4,5]
-        #cv_weeks = [4,5]
-        cluster_scores={}
-        #cv_weeks = [5]
+        #cv_weeks = [0,1,2,3,4,5]
+        cv_weeks = [4,5]
+
+        cluster_scores, traj_scores = {}, {}
         uuid_weeks = [week0_uuids, week1_uuids, week2_uuids, week3_uuids, week4_uuids, week5_uuids]
+
         for test_week in cv_weeks:
+
+            cluster_scores[test_week] = {}
+            traj_scores[test_week] = {}
 
             print "CV week %s is test week" % test_week
             region_test_set = list( set(X_source.keys()) & set(uuid_weeks[test_week]))
@@ -245,63 +249,57 @@ def run_all(plotting, episode_store, learn_methods, qsr_type, publishers):
             print "  size of test set %s in region: %s" % (len(region_test_set), roi)
             print "  size of feature space %s in region: %s" % (len(X_source_cv.keys()), roi)
 
-            # **************************************************************#
-            #                    Learn a Clustering model                   #
-            # **************************************************************#
-            rospy.loginfo('Learning...')
-            params, tag = gh.AG_setup(input_data, date, str_roi)
+            repeats = {}
+            for rep in xrange(10):
+                cluster_scores[test_week][rep] = {}
 
-            feature_space = (code_book_hashes, code_book, X_source_cv)
-            smartThing = Learning(f_space=feature_space, roi=str(roi), vis=plotting)
+                # **************************************************************#
+                #                    Learn a Clustering model                   #
+                # **************************************************************#
+                rospy.loginfo('Learning...')
+                params, tag = gh.AG_setup(input_data, date, str_roi)
 
-            smartThing.split_data_on_test_set(scale=True, test_set=region_test_set, feat_select=None)
-            #pca, scores = smartThing.pca_investigate_variables(apply = True)
+                feature_space = (code_book_hashes, code_book, X_source_cv)
+                smartThing = Learning(f_space=feature_space, roi=str(roi), vis=plotting)
 
-            # **************************************************************#
-            #                           Learn KMEANS                        #
-            # **************************************************************#
-            if "kmeans" in methods:
+                smartThing.split_data_on_test_set(scale=True, test_set=region_test_set, feat_select=None)
+                #pca, scores = smartThing.pca_investigate_variables(apply = True)
+
+                # **************************************************************#
+                #                           Learn KMEANS                        #
+                # **************************************************************#
                 rospy.loginfo('Good ol k-Means')
                 smartThing.kmeans()
                 smartThing.cluster_radius(method="kmeans")
-
-                rospy.loginfo('Testing k-Means')
                 #smartThing.save(learning_area)
 
                 plotting=False
                 if plotting: visualise_clusters(smartThing)
 
-                cluster_scores = kmeans_test_set(smartThing, cluster_scores, iter=True, publish=publishers)
+                #Generate the occupancy grid using the QSRs and cluster centres.
+                vis=False
+                theta_grids = get_cluster_occu_grids(smartThing, publishers, vis)
 
-        name = 'all_cluster_scores_comb_qsrs.p'
-        file = '/home/strands/STRANDS/TESTING/' + name
-        pickle.dump(cluster_scores, open(file, "w"))
-        rospy.loginfo("Finished generating scores (and dumped them in TESTING/%s)" %name)
+                """Two scores:
+                #2. How good is the prediction on partial trajectories. Does seq match seq_n's prediction.
+                #1. How good is the prediction of future trajectories. This is the occupancygrid scores summed for future.
+                """
 
-        evaluate_predictions(cluster_scores, False, False, True)
-        sys.exit(1)
+                #Score 2
+                cluster_scores[test_week][rep] = test_trajectories_against_occu_grids(smartThing, theta_grids, vis)
+                print "finished test week: ", repr(test_week), ". Repeat: ", repr(rep)
 
-        # **************************************************************#
-        #                 Learn a AffinityPropagation                   #
-        # **************************************************************#
-        if "affinity_prop" in methods:
-            rospy.loginfo('Learning AffinityPropagation')
-            smartThing.tf_idf_cosine_similarity_matrix()
-            smartThing.AffinityPropagation()
-            smartThing.cluster_radius(method="affinityprop")
-            if plotting: visualise_clusters(smartThing)
+                #Score 1
+                #traj_scores[test_week] = k_means_test_sequences(smartThing, theta_grids, vis)
+                #file_wk = '/home/strands/STRANDS/TESTING/traj_seq_scores_comb_qsrs_wk_' + repr(test_week) + '.p'
+                #pickle.dump(traj_scores[test_week], open(file_wk, "w"))
 
+            file = '/home/strands/STRANDS/TESTING/theta_comp_scores_repeated.p'
+            pickle.dump(cluster_scores, open(file, "w"))
 
-        # **************************************************************#
-        #                    Upload model to MongoDB                    #
-        # **************************************************************#
-        #smartThing.save(mongodb=True, msg_store="spatial_qsr_models_offline")
-        #smartThing.save(learning_area)  #save to file
-        print "Learnt models for: "
-        for key in smartThing.methods:
-            print "    ", key
-
-        #something = Learning(load_from_file='mongodb', roi=roi)
+        #file = '/home/strands/STRANDS/TESTING/traj_seq_scores_comb_qsrs_wk_.p'
+        #pickle.dump(traj_scores, open(file, "w"))
+        rospy.loginfo("Finished generating scores (and dumped them in TESTING/")
 
     print "COMPLETED LEARNING PHASE"
     return
