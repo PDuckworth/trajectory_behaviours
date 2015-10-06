@@ -44,6 +44,25 @@ def fix_data_length(data, max_number_of_poses=None, file=None):
         else:
             return new_data
 
+def discretise_data(data, bin_size):
+
+    data_ret = {"x":[], "y":[], "angles":[], "velocities":[]}
+    print "number of subject ids: ", len(data)
+
+    discretised_data = {}
+    for cnt, (uuid, poses) in enumerate(data.items()):
+
+        xs, ys, angles, velocities = [], [], [], []   #valid x and y's with positive velocity
+        p = []
+        for x_, y_, z_ in poses:
+
+            x = int(x_ / float(bin_size))
+            y = int(y_ / float(bin_size))
+            p.append((x, y))
+
+        discretised_data[uuid] = p
+    return discretised_data
+
 
 def E_init_step(params, vis=False):
     """
@@ -95,7 +114,7 @@ def E_step(E_mat, data, mu, params, sigma=None, vis=False ):
 
             for t in xrange(0, num_of_timepoints):
                 dist = (u[t] - v[t])**2
-                product_this = math.exp( (-1/float(2 * sigma**2) * dist) )
+                product_this = math.exp((-1/float(2 * sigma**2) * dist))
                 if vis: print "x = %s, mu_m[t] = %0.3f, dist = %0.3f, exp(-1/2sigma**2*dist): %0.5f"\
                       % (u[t], v[t], dist, product_this)
                 product_these *= product_this
@@ -103,6 +122,7 @@ def E_step(E_mat, data, mu, params, sigma=None, vis=False ):
             if vis: print product_these
             E_mat[cnt, motion] = product_these
         if vis: print E_mat[:, motion]
+        print "here: \n", E_mat
 
 
     #columns of E_mat must sum to 1, as they are likelihoods:
@@ -136,7 +156,7 @@ def M_step(mu, data, E_mat, params, vis=False):
                 x, y = poses[t]
                 if vis: print "    subject: %s \n    E = %s, poses: %s" % (cnt, E_mat[cnt, motion], poses[t])
 
-                nominator += E_mat[cnt, motion]*x #poses[t]
+                nominator += E_mat[cnt, motion]*x
                 denominator += E_mat[cnt, motion]
                 if vis: print "    nom: %s, denom %s" %(E_mat[cnt, motion]*x, E_mat[cnt, motion])
 
@@ -145,25 +165,15 @@ def M_step(mu, data, E_mat, params, vis=False):
     return mu
 
 
-def discretise_data(data, bin_size):
+def overall_likelihood(E_mat):
+    """
+    Returns the overall average likelihood of an Expectation Matrix
+    """
+    average_likelihood = 0
+    for each_subject in E_mat:
+        average_likelihood += max(each_subject)
 
-    data_ret = {"x":[], "y":[], "angles":[], "velocities":[]}
-    print "number of subject ids: ", len(data)
-
-    discretised_data = {}
-    for cnt, (uuid, poses) in enumerate(data.items()):
-
-        xs, ys, angles, velocities = [], [], [], []   #valid x and y's with positive velocity
-        p = []
-        for x_, y_, z_ in poses:
-
-            x = int(x_ / float(bin_size))
-            y = int(y_ / float(bin_size))
-            p.append((x, y))
-
-        discretised_data[uuid] = p
-    return discretised_data
-
+    return average_likelihood/float(len(E_mat))
 
 
 def mini_example_to_check():
@@ -171,12 +181,15 @@ def mini_example_to_check():
     """
 
     #Initialise E_mat randomly (with unimodal peak)
-    E_mat = np.array( [[0.6 ,0.4], [0.1, 0.9], [0.8, 0.2]] )
+    E_mat = np.array([[0.6, 0.4],
+                      [0.1, 0.9],
+                      [0.8, 0.2]])
+
     #E_mat = np.array( [[0.6 ,0.4], [0.1, 0.9]] )
-    print "\nE_mat^0 = \n", E_mat
+    print "\nE_mat^1 = \n", E_mat
 
     #Create some fake pose data
-    fake_data = {1 : [(1,1), (10,10)],
+    fake_data = {1: [(1,1), (10,10)],
                  2: [(1,1),(5,5)],
                  3: [(4,4), (25,25)]}
 
@@ -191,30 +204,18 @@ def mini_example_to_check():
     #Initialise the mu matrix
     mu = np.zeros(2*2).reshape(2, 2)
 
-    #First iteration of EM, create mu using initialise E_mat
-    mu = M_step(mu, data, E_mat, params, vis=False)
-    print "\nmu^1 = \n", mu
+    num_of_em_iterations = 3
+    for iter in xrange(1, num_of_em_iterations+1):
+        print "\nNumber of Interations ", iter
 
-    #Second is to update models mu matrix
-    E_mat = E_step(E_mat, data, mu, params, vis=False)
-    print "\nE_mat^1 = \n", E_mat
+        mu = M_step(mu, data, E_mat, params, vis=False)
+        print "\nmu%s = \n %s" % (iter, mu)
 
-    #Continue looping
-    mu = M_step(mu, data, E_mat, params, vis=False)
-    print "\nmu^2 = \n", mu
-    E_mat = E_step(E_mat, data, mu, params, vis=False)
-    print "\nE_mat^2 = \n", E_mat
-    mu = M_step(mu, data, E_mat, params, vis=False)
-    print "\nmu^3 = \n", mu
-    E_mat = E_step(E_mat, data, mu, params, vis=False)
-    print "\nE_mat^3 = \n", E_mat
-    mu = M_step(mu, data, E_mat, params, vis=False)
-    print "\nmu^4 = \n", mu
-    E_mat = E_step(E_mat, data, mu, params, vis=False)
-    print "\nE_mat^4 = \n", E_mat
+        E_mat = E_step(E_mat, data, mu, params, vis=False)
+        print "\nE_mat%s = \n %s" % (iter, E_mat)
 
-    #Stopping Criteria:
-
+        #Stopping Criteria:
+        print "overall likelihood = ", overall_likelihood(E_mat)
 
 
 if __name__ == "__main__":
