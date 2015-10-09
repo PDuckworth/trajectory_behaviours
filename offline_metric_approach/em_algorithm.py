@@ -91,11 +91,11 @@ def E_init_step(params, vis=False):
 	return E_mat
 
 
-def M_step(E_mat, mu, data, params, vis=False):
+def M_step(it, E_mat, mu, data, params, vis=False):
 	"""
 	returns: matrix of Mean values (mu), shape (MxT) = (#of motion behaviours x #of timepoints)
 	"""
-	if vis: print "\nM STEP"
+	if vis: print "\nM STEP %s" % it
 	num_of_motions = params["num_of_motions"]
 	num_of_trajs = params["num_of_trajs"]
 	num_of_timepoints = params["num_of_timepoints"]
@@ -121,16 +121,18 @@ def M_step(E_mat, mu, data, params, vis=False):
 
 			mu[motion, t] = nominator/denominator
 			if vis: print "  mu (%s, %s) = %s " % (motion, t,  mu[motion, t])
+
+	print "\nmu%s = \n %s" % (it, mu)
 	return mu
 
 
-def E_step(E_mat, mu, data, params, sigma=None, vis=False ):
+def E_step(it, E_mat, mu, data, params, sigma=None, vis=False ):
 	"""
 	returns: matrix of Expected values, shape (NxM) = (#of trajectories, #of motion behaviours)
 		first is normalise so sum of expectances over the motion models equals 1
 		second is pre-normalisation
 	"""
-	if vis: print "\n=====\nE STEP\n====="
+	if vis: print "\n=====\nE STEP %s \n=====" % it
 	num_of_motions = params["num_of_motions"]
 	num_of_trajs = params["num_of_trajs"]
 	num_of_timepoints = params["num_of_timepoints"]
@@ -160,29 +162,26 @@ def E_step(E_mat, mu, data, params, sigma=None, vis=False ):
 		if vis: print E_mat[:, motion]
 
 
-	#normalise E_mat so a row over all motions sum to 1, as they are likelihoods:
+	#normalise E_mat so a row over all motions sum to 1
 	norm_E_mat = E_mat.copy()
 	for traj in xrange(0, num_of_trajs):
 		s = sum(E_mat[traj, :])
 		norm_E_mat[traj, :] = E_mat[traj, :] / s
 
-	##############################################
-	# Calculate Data likelihood using this E_mat #
-	###############################################
-	log_likelihood = get_data_log_likelihood(E_mat, mu, data, params, sigma, vis)
-
-	return norm_E_mat, E_mat, log_likelihood
+	print "\nE_mat%s = \n %s" % (it, norm_E_mat)
+	return norm_E_mat, E_mat
 
 
-def monitoring_convergence(mu, previous_mu, delta=0.1):
+def monitoring_convergence(it, mu, previous_mu, delta=0.1, vis=False):
 	"""
 	monitors the convergence of the EM algorithm:
 		Previous Expecation matrix - New Expecation matrix  < delta = converged
 	"""
+	# todo: Check the data log likelihood score instead of the mean?
+	print "\nTest Convergence... "
 
-	print previous_mu
-	print mu
-	print sum(sum(abs(previous_mu-mu)))
+	if vis: print "%s, \n %s" % (previous_mu, mu)
+	if vis: print "difference in iter %s means: %s" % (it, sum(sum(abs(previous_mu-mu))))
 
 	if sum(sum(abs(previous_mu-mu))) < delta:
 		print ">>Converged."
@@ -192,71 +191,116 @@ def monitoring_convergence(mu, previous_mu, delta=0.1):
 		return False
 
 
-def test1_low_data_likelihood(un_normed_E_mat, E_mat, mu, delta = 0.01, vis=False):
+def test1_low_data_likelihood(un_normed_E_mat, E_mat, mu, poses, delta = 0.01, vis=False):
 	"""
 	For each trajectory test whether is has low likelihood for all motion patterns.
 	"""
 	print "\nTesting Likelihood of Trajectories"
-	for i, Ec_im in enumerate(un_normed_E_mat):
-		if vis: print i, Ec_im, max(Ec_im)*100
-		if max(Ec_im) < delta:
-			print ">>> Low Likelihood case"
-			print "ADD THIS TRAJECTORY E[c_i]"
-	return
+	print un_normed_E_mat
+
+	most_likelihoods = [max(Ec_im) for Ec_im in un_normed_E_mat]
+	least_likely = np.argmin(most_likelihoods)
+
+	if most_likelihoods[least_likely] < delta:
+		print ">>> Least Likely trajectory is %s. Poses: %s" % (least_likely, poses[least_likely])
+
+		"""Add trajectory as new mean"""
+		new_mean = np.array([])
+		for x, y in poses[least_likely]:
+			new_mean = np.append(new_mean, x)
+
+		new_mu = []
+		for mean in mu:
+			print mean
+			new_mu.append(mean)
+		new_mu.append(new_mean)
+		print new_mu
+
+		"""Add new Expectations for new mean"""
+		print un_normed_E_mat
 
 
-def test2_low_motion_utility(data_likelihood, E_mat, mu, data, params, sigma, vis=False):
+	#todo: If the trajectory has low likelihood, add a motion pattern with mean of this
+	return E_mat, mu
+
+
+def test2_low_motion_utility(it, converged_likelihood, E_mat, mu, data, params, sigma, vis=False):
 	"""calculate the motion pattern utility, which is the change in data log-likelihood
 		with and without the specific motion pattern included.
 	"""
 	print "\ncalculating motion utility..."
 
-	print "  Current log likelihood with m=%s is %s " % (len(E_mat[0]), data_likelihood)
+	print "Current log likelihood with m=%s is %s " % (len(E_mat[0]), converged_likelihood)
+	if vis: print params
 
 	converged_num_of_motion = params["num_of_motions"]
 	params["num_of_motions"] = converged_num_of_motion - 1
 
-	print E_mat
-	print mu
+	if vis: print E_mat
+	if vis: print mu
 	all_likelihoods = [0]*(converged_num_of_motion+1)
-	all_likelihoods[converged_num_of_motion] = data_likelihood
+	all_likelihoods[converged_num_of_motion] = converged_likelihood
 
-	##When Testing the Motion Utilites: keep all E_mat and mu matrices
-	possible_E_mats = [E_mat]*(converged_num_of_motion)
-	possible_mus = [mu]*(converged_num_of_motion)
+	# When Testing the Motion Utilites: keep all E_mat and mu matrices.
+	# The last possible will be the currently converged E_mat/mu.
+	possible_E_mats = [E_mat]*(converged_num_of_motion+1)
+	possible_mus = [mu]*(converged_num_of_motion+1)
+
 
 	for m in xrange(0, converged_num_of_motion):
 		print "\nremove motion: %s and recalculate..." %m
 		cols = range(0, m)+range(m+1, converged_num_of_motion)
-		print "remaining m's = ", cols
+		#print "remaining m's = ", cols
 
 		E_mat_reduced = E_mat[:,cols]
 		mu_reduced = mu[cols,:]
 
-		print E_mat_reduced
-		print mu_reduced
+		if vis: print E_mat_reduced
+		if vis: print mu_reduced
+
 		possible_mus[m] = mu_reduced
+		possible_E_mats[m] = E_mat_reduced
 
-		print "redo E_mat & likelihood"
-		possible_E_mats[m], normed_E_mat, all_likelihoods[m] = E_step(E_mat_reduced, mu_reduced, data, params, True)
+		all_likelihoods[m] = data_log_likelihood(it, E_mat_reduced, mu_reduced, data, params, sigma, vis)
 
-		print "New non normed E_mat:\n", normed_E_mat
+	best_model = np.argmax(all_likelihoods)
+	if best_model == converged_num_of_motion: finished = True
+	else: finished = False
 
-	for m, likelihood in enumerate(all_likelihoods):
-		if abs(likelihood) < abs(data_likelihood):
-			print "Remove this motion / Merge the motion patterns as it is not needed"
-			print "New E_mat?", possible_E_mats[m]
-			print "New mu = ", possible_mus[m]
+	best_cols = range(0, best_model) + range(best_model +1, converged_num_of_motion)
+	best_E_mat = E_mat[:,best_cols]
+	best_mu = mu[best_cols,:]
+	if vis:
+		print best_cols
+		print all_likelihoods
+		print "BEST MODEL = %s" % best_model
+		print converged_num_of_motion
+		print best_E_mat
+		print best_mu
 
-	return
+	if finished: print "\nDesicion: Converged Model is Best (with m = %s)" % best_model
+	else: print "\nDesicion: remove motion", best_model
+	return best_E_mat, best_mu, finished
 
 
+def get_c_im(E_mat):
+	"""
+	Create c_im matrix which is binary for the classified motion pattern
+	"""
+	rows, cols = E_mat.shape
+	c_im = np.zeros(rows*cols).reshape(rows, cols)
 
-def get_data_log_likelihood(E_mat, mu, data, params, sigma, vis=False):
+	for cnt, row in enumerate(E_mat):
+		c_im[cnt, np.argmax(row)] = 1
+	return c_im
+
+
+def data_log_likelihood(it, E_mat, mu, data, params, sigma, vis=False):
 	"""
 	Returns the data log likelihood of an Expectation Matrix E_mat.
 	Equation (6) in Bennewitz ICRA02
 	"""
+	if vis: print "\nIter: %s. Calculating data log likelihood..." % it
 
 	num_of_motions = params["num_of_motions"]
 	num_of_trajs = params["num_of_trajs"]
@@ -268,15 +312,8 @@ def get_data_log_likelihood(E_mat, mu, data, params, sigma, vis=False):
 
 	(uuids, all_poses) = data
 
-	#Create c_im matrix which is binary for the classified motion pattern
-	rows, cols = E_mat.shape
-	c_im = np.zeros(rows*cols).reshape(rows, cols)
-
-	for cnt, row in enumerate(E_mat):
-		c_im[cnt, np.argmax(row)] = 1
+	c_im = get_c_im(E_mat)
 	if vis: print "c_im = \n", c_im
-
-	if vis: print "\nCalculating data log likelihood"
 
 	current_sum = 0
 	for cnt, (uuid, poses) in enumerate(zip(uuids, all_poses)):
@@ -284,77 +321,144 @@ def get_data_log_likelihood(E_mat, mu, data, params, sigma, vis=False):
 		if vis: print "\nsubject: ", cnt
 
 		traj_sum = 0
-
 		for t in xrange(0, num_of_timepoints):
-			if vis: print "\ntimepoint: ", t
+			if vis: print "\n  timepoint: ", t
 
 			u = [pose[0] for pose in poses]
 
 			motion = np.argmax(c_im[cnt])
-			if vis: print "\nmotion: ", motion
+			if vis: print "\n    motion: ", motion
 			v = mu[motion]
 			dist = (u[t] - v[t])**2
 
-			if vis: print "x[%s] = %s, mu[%s] = %s, dist = %s" %(t, u[t], t, v[t], dist)
+			if vis: print "    x[%s] = %s, mu[%s] = %s, dist = %s" %(t, u[t], t, v[t], dist)
 
 			traj_sum += c_im[cnt, motion] * dist
-			if vis: print "sum = ", traj_sum
+			if vis: print "    sum = ", traj_sum
 
-		#print (one_over_2sigma_sq * traj_sum)
-		#print constant - (one_over_2sigma_sq * traj_sum)
-		current_sum += constant - (one_over_2sigma_sq * traj_sum)
-	print "overall data log likelihood =", current_sum
+		# print (one_over_2sigma_sq * traj_sum)
+		traj_log_likelihood = (constant - (one_over_2sigma_sq * traj_sum))
+		if vis: print "subj likelihood: ", traj_log_likelihood
+
+		current_sum += traj_log_likelihood
+
+	print "Iter = %s. Data log likelihood = %s " % (it, current_sum)
 	return current_sum
 
-def mini_example_to_check():
-	"""Example with fake data
-	"""
 
-	#Initialise E_mat randomly (with unimodal peak)
-	print "\nInteration: 0"
-	E_mat = np.array([[0.6, 0.4],
-					  [0.1, 0.9],
-					  [0.8, 0.2]])
+def confusion_matrix_image(E_mat):
+	#todo: Print the E_matrix as a confusion image, like in ICRA paper.
+	return
 
-	#E_mat = np.array( [[0.6 ,0.4], [0.1, 0.9]] )
-	print "\nE_mat^0 = \n", E_mat
+
+def example_remove_motion():
 
 	#Create some fake pose data
 	fake_data = {1: [(1,1), (10,10)],
-				 2: [(1,1),(5,5)],
-				 3: [(4,4), (25,25)]}
+				 2: [(1,1),(9,9)],
+				 3: [(4,4), (25,25)],
+	             4: [(3,3), (20,20)]}
+
+	params = {"num_of_motions": 3,
+			  "num_of_trajs": 4,
+			  "num_of_timepoints": 2}
+
+	E_mat = np.array([[0.2, 0.6, 0.2],
+					  [0.1, 0.4, 0.5],
+					  [0.4, 0.3, 0.3],
+	                  [0.8, 0.1, 0.1]])
+
+	return fake_data, E_mat, params
+
+
+def example_adding_motion():
+
+	#Create some fake pose data
+	fake_data = {1: [(1,1), (10,10)],
+				 2: [(1,1),(9,9)],
+				 3: [(4,4), (25,25)],
+	             4: [(10,10), (1,1)]}
+
+	params = {"num_of_motions": 2,
+			  "num_of_trajs": 4,
+			  "num_of_timepoints": 2}
+
+	E_mat = np.array([[0.2, 0.8],
+					  [0.6, 0.4],
+					  [0.4, 0.6],
+	                  [0.8, 0.2]])
+
+	return fake_data, E_mat, params
+
+def mini_example():
+	"""Example with fake data
+	"""
+
+	#fake_data, E_mat, params = example_remove_motion()
+	fake_data, E_mat, params = example_adding_motion()
 
 	uuids = fake_data.keys()
 	poses = [fake_data[i] for i in sorted(uuids)]
 	data = (uuids, poses)
+	num_of_em_iterations = 10
 
-	params = {"num_of_motions": 2,
-			  "num_of_trajs": 3,
-			  "num_of_timepoints": 2}
+	"""Initialise Everything"""
+	it = 0
+	print "\nInteration: %s" % it
+	#E_mat = E_init_step(params, vis=False)
 
-	num_of_em_iterations = 3
-	mu = np.zeros(2*2).reshape(2, 2)
+	print "\nE_mat^%s = \n%s" % (it, E_mat)
+
+	mu_init = np.zeros(params["num_of_motions"]*params["num_of_timepoints"]).\
+		reshape(params["num_of_motions"], params["num_of_timepoints"])
+
+	mu = M_step(it, E_mat, mu_init, data, params, vis=False)
+	log_likelihood = data_log_likelihood(it, E_mat, mu, data, params, sigma=1, vis=False)
+
+	finished = False
+
 	for it in xrange(1, num_of_em_iterations+1):
 
-		previous_mu = mu.copy()
-		mu = M_step(E_mat, mu, data, params, vis=False)
-		print "\nmu%s = \n %s" % (it-1, mu)
-
-		print "\nTest Convergence... "
-		if monitoring_convergence(mu, previous_mu) and it>1:
-
-			test1_low_data_likelihood(un_normed_E_mat, E_mat, mu, vis=False)
-
-			test2_low_motion_utility(likelihood, E_mat, mu, data, params, sigma=1, vis=False)
-
+		if finished: continue
 		print "\nInteration: ", it
 
-		E_mat, un_normed_E_mat, likelihood = E_step(E_mat, mu, data, params, vis=False)
-		print "\nE_mat%s = \n %s" % (it, E_mat)
+		"""E_step"""
+		E_mat, un_normed_E_mat = E_step(it, E_mat, mu, data, params, vis=False)
+
+		"""M_step"""
+		previous_mu = mu.copy()
+		mu = M_step(it, E_mat, mu, data, params, vis=False)
+
+		"""Data Likelihood"""
+		likelihood = data_log_likelihood(it, E_mat, mu, data, params, sigma=1, vis=False)
+
+		"""Test Convergence"""
+		if monitoring_convergence(it, mu, previous_mu, delta=0.1, vis=False) and it>1:
+
+			"""Test Trajectory Likelihoods"""
+			e, m = test1_low_data_likelihood(un_normed_E_mat, E_mat, mu, poses, vis=True)
+
+			"""Test Motion Utility"""
+			e, m, finished = test2_low_motion_utility(it, likelihood, E_mat, mu, data, params, sigma=1, vis=False)
+
+			"""Break from Loop"""
+			print "\nMODEL UNCHANGED? ", finished
+
+			if not finished:
+				print "CONTINUE, but WITH NEW NUMBER OF MOTIONS:"
+
+			E_mat = e.copy()
+			mu = m.copy()
+
+	print "Converged, and no better model found."
+	print "\nRESULTS:   "
+	print "E_mat = \n%s" % E_mat
+	print "mu = \n%s" % mu
+	print "c_im = \n%s" % get_c_im(E_mat)
 
 if __name__ == "__main__":
 
-	mini_example_to_check()
+	mini_example()
 	sys.exit(1)
 
 	file = '/home/strands/STRANDS/TESTING/offline_UUIDS_to_include_in_metric_roi_1'
