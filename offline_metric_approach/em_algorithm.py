@@ -11,14 +11,17 @@ import numpy as np
 import math
 
 
-def load_data(file, vis=None):
+def load_data(max_trajs, file='/home/strands/STRANDS/TESTING/offline_UUIDS_to_include_in_metric_roi_1', vis=False):
 	##Get date from pickle
 	with open(file, "rb") as f:
 		data = pickle.load(f)
 	print "number of trajectories loaded = ", len(data)
+	print "number of trajectories being used: %s" % max_trajs
 
 	max_number_of_poses = 0
 	for cnt, (uuid, poses) in enumerate(data.items()):
+		if cnt > max_trajs: continue
+
 		if vis: print "%s: %s Poses: %s" % (cnt, uuid, len(poses))
 		if len(poses) > max_number_of_poses:
 			max_number_of_poses = len(poses)
@@ -70,23 +73,19 @@ def E_init_step(params, vis=False):
 	Initialises the expectation matrix with a unimodal distribution - for each trajectory
 	return: matrix of Expected values, shape (NxM) = (#of trajectories, #of motion behaviours)
 	"""
-	num_of_motions = params["num_of_motions"]
-	num_of_trajs = params["num_of_trajs"]
+	E_mat = np.zeros(params["num_of_motions"]*params["num_of_trajs"]).\
+							reshape(params["num_of_trajs"], params["num_of_motions"])
 
-	E_mat = np.zeros(num_of_motions*num_of_trajs).reshape(num_of_trajs, num_of_motions)
-
-	for i in xrange(0, num_of_trajs):
-		random_vec = np.random.rand(num_of_motions)
-		#sum_ = sum(random_vec)
+	for i in xrange(0, params["num_of_trajs"]):
+		random_vec = np.random.rand(params["num_of_motions"])
 		dist_vec = random_vec / sum(random_vec)
 		E_mat[i,:] = dist_vec
 
 		if vis:
-			print "motion m = %s of %s " % (i, num_of_motions)
-			print random_vec, sum(random_vec)
-			print dist_vec
-			print E_mat
-
+			print "subj i = %s out of %s " % (i, params["num_of_trajs"])
+			print E_mat[i,:]
+			#print random_vec, sum(random_vec)
+			#print dist_vec, sum(dist_vec)
 	#print E_mat.sum(axis=1)
 	return E_mat
 
@@ -123,7 +122,7 @@ def M_step(it, E_mat, mu, data, params, vis=False):
 
 			mu[motion, t] = (nominator_x/float(denominator), nominator_y/float(denominator))
 			if vis: print "  mu (%s, %s) = %s " % (motion, t,  mu[motion, t])
-	print "\nmu%s = \n %s" % (it, mu)
+	if vis: print "\nmu%s = \n %s" % (it, mu)
 	return mu
 
 
@@ -146,6 +145,8 @@ def E_step(it, E_mat, mu, data, params, sigma=None, vis=False ):
 		for cnt, (uuid, poses) in enumerate(zip(uuids, all_poses)):
 			if cnt>=(num_of_trajs): continue
 
+			#if cnt == 2: sys.exit(1)
+
 			if vis: print "\nsubject: ", cnt
 			center = mu[motion]
 			product_these = 1
@@ -153,22 +154,25 @@ def E_step(it, E_mat, mu, data, params, sigma=None, vis=False ):
 			for t in xrange(0, num_of_timepoints):
 				mag = np.linalg.norm((center[t] - poses[t])) **2
 				product_this = math.exp((-1/float(2 * sigma**2) * mag))
-				if vis: print "time: %s, x = %s, mu_m[t] = %0.2f, mag = %0.2f"\
-					% (t, center[t], poses[t], mag)
+
+				if vis: print "time: %s, x = %s, mu_m[t] = %s, mag = %0.2f"\
+					% (t, poses[t], center[t], mag)
+				#print product_this
+				#print product_these
 				product_these *= product_this
 
 			if vis: print "E_[c%s%s] = %s" % (cnt, motion, product_these)
 			E_mat[cnt, motion] = product_these
 		if vis: print E_mat[:, motion]
 
-
 	#normalise E_mat so a row over all motions sum to 1
 	norm_E_mat = E_mat.copy()
-	for traj in xrange(0, num_of_trajs):
+	for cnt, traj in enumerate(xrange(0, num_of_trajs)):
 		s = sum(E_mat[traj, :])
-		norm_E_mat[traj, :] = E_mat[traj, :] / s
+		if s > 0: norm_E_mat[traj, :] = E_mat[traj, :] / s
+		else: norm_E_mat[traj, :] = E_mat[traj, :]
 
-	print "\nE_mat%s = \n %s" % (it, norm_E_mat)
+	if vis: print "\nE_mat%s = \n %s" % (it, norm_E_mat)
 	return norm_E_mat, E_mat
 
 
@@ -375,7 +379,6 @@ def example_remove_motion():
 
 	return fake_data, E_mat, params
 
-
 def example_adding_motion():
 
 	#Create some fake pose data
@@ -400,7 +403,6 @@ def example_mini():
 	#Create some fake pose data
 	fake_data = {1: [(1,1), (10,10)],
 				 2: [(1,1), (5,5)]}
-
 	params = {"num_of_motions": 2,
 			  "num_of_trajs": 2,
 			  "num_of_timepoints": 2}
@@ -410,53 +412,101 @@ def example_mini():
 
 	return fake_data, E_mat, params
 
+def get_fake_data(which_data):
+	if which_data is 1:
+		fake_data, E_mat, params = example_mini()
+	elif which_data is 2:
+		fake_data, E_mat, params = example_remove_motion()
+	elif which_data is 3:
+		fake_data, E_mat, params = example_adding_motion()
+	return fake_data, E_mat, params
 
-def mini_example(which_example=1):
-	"""Example with fake data
+def g4s_data(m_start, max_traj=None):
+
+	data, max_number_of_poses = load_data(max_traj)
+
+	#Fix the len of all poses:
+	#file = '/home/strands/STRANDS/TESTING/metric_uuid_poses_append.p'
+	extended_data = fix_data_length(data, max_number_of_poses)
+
+	#Discretise data
+	print "discretising data..."
+	#todo: set the bin_size the same as our Qualitative Occu Grid
+	discretised_data = discretise_data(data=extended_data, bin_size=1)
+
+	uuids = discretised_data.keys()
+	poses = [discretised_data[i] for i in uuids]
+	data = (uuids, poses)
+
+	#EM iterations
+	num_of_motions = m_start                                        #This is M
+	num_of_trajs = len(discretised_data.keys())                     #This is N
+	num_of_timepoints = max_number_of_poses                         #This is T
+
+	num_of_em_iterations = 100
+
+	params = {"num_of_motions": num_of_motions,
+			  "num_of_trajs": num_of_trajs,
+			  "num_of_timepoints": num_of_timepoints,
+			  "num_of_em_iterations": num_of_em_iterations}
+	print "params = ", params
+
+	E_mat = E_init_step(params, vis=False)
+
+	sys.exit(1)
+
+	return data, E_mat, params
+
+
+def sample_of_g4s():
+
+	return
+
+def EM_algorithm(which_data = None, m_start=10, max_traj=None):
+	"""
+	Run the EM algorithm until convergence
 	"""
 
-	if which_example is 1:
-		fake_data, E_mat, params = example_mini()
-	elif which_example is 2:
-		fake_data, E_mat, params = example_remove_motion()
-	elif which_example is 3:
-		fake_data, E_mat, params = example_adding_motion()
-
-	uuids = fake_data.keys()
-	poses = [fake_data[i] for i in sorted(uuids)]
-	data = (uuids, poses)
-	num_of_em_iterations = 10
-	number_added, number_removed = 0, 0
+	if which_data is not None:
+		data, E_mat, params = get_fake_data(which_data)
+	else:
+		data, E_mat, params = g4s_data(m_start, max_traj)
+	uuids, poses = data
 
 	"""Initialise Everything"""
 	it = 0
+	t1, t2, t3 = 0, 0, 0
+	number_added, number_removed = 0, 0
 
-	print "\nIteration: %s. m = %s" % (it, params["num_of_motions"])
-	#E_mat = E_init_step(params, vis=False)
-
-	print "\nE_mat^%s = \n%s" % (it, E_mat)
-
+	#print "\nE_mat^%s = \n%s" % (it, E_mat)
 	mu_init = np.array([[(0.0,0.0)]*params["num_of_timepoints"]]*params["num_of_motions"])
-
 	mu = M_step(it, E_mat, mu_init, data, params, vis=False)
+
+	print "\nIteration: %s. m = %s. total = %s" % (it, params["num_of_motions"], mu.shape)
 	likelihood = data_log_likelihood(it, E_mat, mu, data, params, sigma=1, vis=False)
 
 	altered = True
-	for it in xrange(1, num_of_em_iterations+1):
+	for it in xrange(1, params["num_of_em_iterations"]+1):
 
 		if not altered: continue
 		converged_in = it
 		print "\nIteration: %s. m = %s." % (it, params["num_of_motions"])
 
 		"""E_step"""
+		st = time.time()
 		E_mat, un_normed_E_mat = E_step(it, E_mat, mu, data, params, vis=False)
+		t1 += time.time()-st
 
 		"""M_step"""
+		st = time.time()
 		mu = M_step(it, E_mat, mu, data, params, vis=False)
+		t2 += time.time()-st
 
 		"""Data Likelihood"""
+		st = time.time()
 		previous_log_like = likelihood
 		likelihood = data_log_likelihood(it, E_mat, mu, data, params, sigma=1, vis=False)
+		t3 += time.time()-st
 
 		"""Test Convergence"""
 		if monitoring_convergence(it, likelihood, previous_log_like, delta=0.1, vis=False) and it>1:
@@ -479,6 +529,8 @@ def mini_example(which_example=1):
 			E_mat = e.copy()
 			mu = m.copy()
 
+		print "Timings: E: %0.1f, M: %0.1f, ll: %0.1f" % (t1, t2, t3)
+
 	print "\nConverged, and no better model found."
 	print "\nRESULTS:   "
 	print "E_mat = \n%s" % E_mat
@@ -488,61 +540,10 @@ def mini_example(which_example=1):
 	print "\nconverged fully in %s iterations" % converged_in
 	print "motion updates: added: %s, removed %s." % (number_added, number_removed)
 
+
+
 if __name__ == "__main__":
-
-	which = 2
-	mini_example(which)
-
-	sys.exit(1)
-
-	file = '/home/strands/STRANDS/TESTING/offline_UUIDS_to_include_in_metric_roi_1'
-	#Get data
-	data, max_number_of_poses = load_data(file, vis=False)
-
-	#Fix the len of all poses:
-	#file = '/home/strands/STRANDS/TESTING/metric_uuid_poses_append.p'
-	extended_data = fix_data_length(data, max_number_of_poses)
-
-	#Discretise data
-	print "discretising data..."
-	#todo: set the bin_size the same as our Qualitative Occu Grid
-	discretised_data = discretise_data(data=extended_data, bin_size=1)
-
-
-	#Manage the trajectory data
-	uuids = discretised_data.keys()
-	poses = [discretised_data[i] for i in uuids]
-	data = (uuids, poses)
-
-
-	#EM iterations
-	num_of_motions = 3                                              #Set M = 10
-	num_of_trajs = 5        #len(discretised_data.keys())           #This is N
-	num_of_timepoints = max_number_of_poses                         #This is T
-
-	num_of_em_iterations = 3
-
-	params = {"num_of_motions": num_of_motions,
-			  "num_of_trajs": num_of_trajs,
-			  "num_of_timepoints": num_of_timepoints,
-			  "num_of_em_iterations": num_of_em_iterations}
-	print "params = ", params
-
-	##INITIALISATION STEP:
-	E_mat = E_init_step(params, vis=False)
-	print "Initial E_mat: \n", E_mat
-
-	mu = np.zeros(num_of_motions*num_of_timepoints).reshape(num_of_motions, num_of_timepoints)
-	print "Initial mu: \n", mu
-
-	for i in xrange(0, num_of_em_iterations-1):
-		print "i = ", i+1
-
-
-		#Do the M step
-		mu = M_step(mu, data, E_mat, params, vis=False)
-		print "\nprint a bit of mu...:\n", mu[:,0:10]
-
-		#Do the E step
-		E_mat = E_step(E_mat, data, mu, params, vis=False)
-		print "\nprint a bit of E_mat...:\n", E_mat[0:10,:]
+	which_data = None
+	m_start = 500
+	max_traj = 10
+	EM_algorithm(which_data, m_start, max_traj)
