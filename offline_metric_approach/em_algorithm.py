@@ -15,18 +15,24 @@ def load_data(max_trajs, file='/home/strands/STRANDS/TESTING/offline_UUIDS_to_in
 	##Get date from pickle
 	with open(file, "rb") as f:
 		data = pickle.load(f)
+
 	print "number of trajectories loaded = ", len(data)
 	print "number of trajectories being used: %s" % max_trajs
 
 	max_number_of_poses = 0
+
+	reduced_data = {}
 	for cnt, (uuid, poses) in enumerate(data.items()):
-		if cnt > max_trajs: continue
+		if cnt >= max_trajs: continue
 
 		if vis: print "%s: %s Poses: %s" % (cnt, uuid, len(poses))
-		if len(poses) > max_number_of_poses:
-			max_number_of_poses = len(poses)
+		if len(poses) > max_number_of_poses: max_number_of_poses = len(poses)
+
+		if max_traj is not None:
+			reduced_data[uuid] = poses
 
 	print "max poses: %s" % max_number_of_poses
+	if max_traj is not None: data = reduced_data
 
 	return data, max_number_of_poses
 
@@ -421,7 +427,7 @@ def get_fake_data(which_data):
 		fake_data, E_mat, params = example_adding_motion()
 	return fake_data, E_mat, params
 
-def g4s_data(m_start, max_traj=None):
+def g4s_data(m_start, em_its, max_traj=None):
 
 	data, max_number_of_poses = load_data(max_traj)
 
@@ -443,7 +449,7 @@ def g4s_data(m_start, max_traj=None):
 	num_of_trajs = len(discretised_data.keys())                     #This is N
 	num_of_timepoints = max_number_of_poses                         #This is T
 
-	num_of_em_iterations = 100
+	num_of_em_iterations = em_its
 
 	params = {"num_of_motions": num_of_motions,
 			  "num_of_trajs": num_of_trajs,
@@ -453,16 +459,10 @@ def g4s_data(m_start, max_traj=None):
 
 	E_mat = E_init_step(params, vis=False)
 
-	sys.exit(1)
-
 	return data, E_mat, params
 
 
-def sample_of_g4s():
-
-	return
-
-def EM_algorithm(which_data = None, m_start=10, max_traj=None):
+def EM_algorithm(which_data = None, m_start=10, em_its=100, max_traj=None):
 	"""
 	Run the EM algorithm until convergence
 	"""
@@ -470,7 +470,7 @@ def EM_algorithm(which_data = None, m_start=10, max_traj=None):
 	if which_data is not None:
 		data, E_mat, params = get_fake_data(which_data)
 	else:
-		data, E_mat, params = g4s_data(m_start, max_traj)
+		data, E_mat, params = g4s_data(m_start, em_its, max_traj)
 	uuids, poses = data
 
 	"""Initialise Everything"""
@@ -544,6 +544,7 @@ def EM_algorithm(which_data = None, m_start=10, max_traj=None):
 
 if __name__ == "__main__":
 	which_data = None
-	m_start = 500
-	max_traj = 10
-	EM_algorithm(which_data, m_start, max_traj)
+	m_start = 2
+	max_traj = 5
+	max_em_its = 1000
+	EM_algorithm(which_data, m_start, max_em_its, max_traj)
