@@ -9,6 +9,28 @@ import cPickle as pickle
 import datetime, time
 import numpy as np
 import math
+from scipy.spatial import distance
+
+
+def get_simple_stats(file='/home/strands/STRANDS/TESTING/offline_UUIDS_to_include_in_metric_roi_1', vis=False):
+	##Get date from pickle
+	with open(file, "rb") as f:
+		data = pickle.load(f)
+
+	print "number of trajectories loaded = ", len(data)
+	distances_data = []
+
+	for (uuid, poses) in data.items():
+		for cnt, pose in enumerate(poses):
+			if cnt == 0:
+				first = pose
+		dist = distance.euclidean(first,pose)
+		distances_data.append(dist)
+		print "%s Poses: %s. distance: %s" % (uuid, len(poses), dist)
+
+	print "max:",max(distances_data)
+	print "avg:", sum(distances_data)/float(len(distances_data))
+	print "median:", np.median(distances_data)
 
 
 def load_data(max_trajs, file='/home/strands/STRANDS/TESTING/offline_UUIDS_to_include_in_metric_roi_1', vis=False):
@@ -425,7 +447,11 @@ def get_fake_data(which_data):
 		fake_data, E_mat, params = example_remove_motion()
 	elif which_data is 3:
 		fake_data, E_mat, params = example_adding_motion()
-	return fake_data, E_mat, params
+
+	uuids = fake_data.keys()
+	poses = [fake_data[i] for i in uuids]
+	data = (uuids, poses)
+	return data, E_mat, params
 
 def g4s_data(m_start, em_its, max_traj=None):
 
@@ -471,7 +497,8 @@ def EM_algorithm(which_data = None, m_start=10, em_its=100, max_traj=None):
 		data, E_mat, params = get_fake_data(which_data)
 	else:
 		data, E_mat, params = g4s_data(m_start, em_its, max_traj)
-	uuids, poses = data
+	if "num_of_em_iterations" not in params: params["num_of_em_iterations"] = 100
+
 
 	"""Initialise Everything"""
 	it = 0
@@ -512,7 +539,7 @@ def EM_algorithm(which_data = None, m_start=10, em_its=100, max_traj=None):
 		if monitoring_convergence(it, likelihood, previous_log_like, delta=0.1, vis=False) and it>1:
 
 			"""Test Trajectory Likelihoods"""
-			e, m, altered, params = test1_low_data_likelihood(un_normed_E_mat, E_mat, mu, poses, params, vis=False)
+			e, m, altered, params = test1_low_data_likelihood(un_normed_E_mat, E_mat, mu, data, params, vis=False)
 			print ">>MOTION ADDED?", altered
 			if altered: number_added+=1
 
@@ -530,6 +557,7 @@ def EM_algorithm(which_data = None, m_start=10, em_its=100, max_traj=None):
 			mu = m.copy()
 
 		print "Timings: E: %0.1f, M: %0.1f, ll: %0.1f" % (t1, t2, t3)
+		#if it is 2:  sys.exit(1)
 
 	print "\nConverged, and no better model found."
 	print "\nRESULTS:   "
@@ -543,8 +571,8 @@ def EM_algorithm(which_data = None, m_start=10, em_its=100, max_traj=None):
 
 
 if __name__ == "__main__":
-	which_data = None
+	which_data = 2
 	m_start = 2
-	max_traj = 5
+	max_traj = 2000
 	max_em_its = 1000
 	EM_algorithm(which_data, m_start, max_em_its, max_traj)
