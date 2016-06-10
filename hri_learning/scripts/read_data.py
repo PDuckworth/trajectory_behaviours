@@ -71,14 +71,9 @@ class DataReader(object):
         for k, v in data_dict.items():
             count = 0
             for idx, (x, y) in enumerate(zip(np.array(v["x"], dtype=float), np.array(v["y"], dtype=float))):
-                #if idx % 5 != 0: continue
+                if idx % 5 != 0: continue
 
-                ob.append(Object_State(
-                    name=v["name"],
-                    timestamp=count,
-                    x=x,
-                    y=y
-                ))
+                ob.append(Object_State(name=v["name"], timestamp=count, x=x, y=y))
                 count+=1
             world.add_object_state_series(ob)
         return world
